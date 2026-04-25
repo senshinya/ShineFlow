@@ -46,7 +46,7 @@
 | --- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | 1   | **执行模型为 context-passing**（共享变量表），边只表达控制流                                           | AI 场景下可读性 / 调试体验明显优于 items-based 数据流      |
 | 2   | **DSL 与 Run 物理分离**，Run 冻结 `VersionID`                                                          | 编辑态不影响在跑任务；审计可回放                           |
-| 3   | **工作流版本化**：`Definition`（稳定身份）+ `Version`（不可变快照）                                    | 发布流程 + 运行绑定都围绕 VersionID                        |
+| 3   | **工作流版本化**：`Definition`（稳定身份）+ `Version`（draft 可变 / release 冻结，共用版本号序列，至多一条 draft 在头部） | domain 暴露 `SaveVersion / PublishVersion / DiscardDraft` 三原语；"保存并发布"按钮 = application 层用单事务组合 `SaveVersion + PublishVersion`，行锁串行化 |
 | 4   | **NodeType 统一目录**：内置节点与插件对调用方是同构的                                                  | 执行引擎 / 前端节点面板只认 NodeType，插件接入无感         |
 | 5   | **NodeType 不落物理表**，由 Registry 从 builtin/HttpPlugin/McpTool 现场合成                            | 避免 derived data 导致的同步一致性问题                     |
 | 6   | **Node 的参数分两处**：`Config`（设计时静态）+ `Inputs`（运行时数据绑定）                              | UI 渲染控件类型自然分化；Config 内支持 `{{var}}` 模板      |
@@ -134,30 +134,37 @@ type WorkflowDefinition struct {
     Name        string
     Description string
 
-    DraftVersionID     string   // 当前编辑态版本
-    PublishedVersionID *string  // 当前发布态版本；nil 表示从未发布
+    DraftVersionID     *string  // 当前 draft 版本；nil 表示当前无 draft（懒创建）
+    PublishedVersionID *string  // 当前最高号的 release 版本；nil 表示从未发布
 
     CreatedBy string
     CreatedAt time.Time
     UpdatedAt time.Time
 }
 
-// WorkflowVersion 是不可变快照；每次发布产生一个新实例。
-// Draft 作为特殊 Version 存在（由 Definition.DraftVersionID 指向），
-// 草稿保存时"就地更新"的其实只是 Draft 这一条 Version 记录。
+type VersionState string
+const (
+    VersionStateDraft   VersionState = "draft"
+    VersionStateRelease VersionState = "release"
+)
+
+// WorkflowVersion 是 DSL 的承载行。draft 可被原地覆盖、可被翻 release、可被硬删；
+// release 后所有字段冻结、不可再变。
 type WorkflowVersion struct {
     ID           string
     DefinitionID string
 
-    Version     int          // 单调递增；Draft 恒为 0，发布后的版本从 1 起
-    IsDraft     bool         // Draft 特标
-    DSL         WorkflowDSL  // 整个图
+    Version  int            // 同 Definition 内单调递增；draft / release 共用同一序列
+    State    VersionState
+    DSL      WorkflowDSL
 
-    PublishedAt *time.Time   // IsDraft=false 时非空
+    Revision int            // 乐观并发版本号；每次 SaveVersion 自增；翻 release 后冻结
+
+    PublishedAt *time.Time  // State=release 时非空（draft → release 那一刻填）
     PublishedBy *string
 
     CreatedAt time.Time
-    UpdatedAt time.Time     // Draft 可变动时更新
+    UpdatedAt time.Time
 }
 
 // WorkflowDSL 是"纯图"：不含 Name / Description / Version / 时间戳。
@@ -167,11 +174,60 @@ type WorkflowDSL struct {
 }
 ```
 
-**发布流程**：用户点"发布" → 复制当前 Draft 的 DSL 到一个新的 `WorkflowVersion{IsDraft:false, Version:N+1}` →
-`Definition.PublishedVersionID` 指向它；Draft 自身继续存在、可继续编辑。
+**版本结构不变式**：
 
-**运行绑定**：任何触发路径拿到 `DefinitionID` → 读 `PublishedVersionID` → 用其 DSL 创建 Run。
-Draft 绝不会被任何触发器选中执行（UI 允许"试运行 Draft"，但走的路径是 `RunService.Start(versionID=<draft>)` 的手动分支，且 Run 上标 `TriggerKind=manual`）。
+- 同一 Definition 下，所有 `WorkflowVersion` 在 `Version` 字段上线性递增、唯一
+- 至多一条 `State="draft"`；若存在，其 `Version` 号 ≥ 所有 `release` 版本的 `Version` 号（draft 永远是序列的"头"）
+- `release` 版本不可变：`DSL` / `Version` / `Revision` / `PublishedAt` / `PublishedBy` 全部冻结
+- `draft` 版本可被原地覆盖（`SaveVersion`）、可被翻为 release（`PublishVersion`）、可被硬删（`DiscardDraft`）
+
+**懒创建**：新建 `Definition` 不立刻生成任何 `WorkflowVersion`；`DraftVersionID` 初值为 nil。首次 `SaveVersion` 才插入第一条 version。
+
+**画布三按钮 ↔ domain 原语**：
+
+| 前端按钮      | 后端实现                                                                                |
+| ------------- | --------------------------------------------------------------------------------------- |
+| 暂存          | 直接调 domain `SaveVersion`                                                             |
+| 保存并发布    | application 层用例：单事务内组合 `SaveVersion + PublishVersion`（见下方"组合用例"段）   |
+| 丢弃草稿      | 直接调 domain `DiscardDraft`                                                            |
+
+domain **不直接暴露**"保存并发布"方法——它是 application 层的组合用例，原子性靠数据库事务 + 行锁，而不是靠合并方法。
+
+**SaveVersion 语义**：
+
+- 创建或覆盖头部 draft；保存的 version 状态默认为 draft
+- head 已是 draft → 原地覆盖该条的 DSL，`Revision++`，`UpdatedAt=now`
+- head 是 release（或 Definition 还无任何 version）→ append 一条新 draft，`Version=max(Version)+1, Revision=1`
+- 调用方需带上 `expectedRevision`（head 非 draft 时传 `0`）；不匹配则拒绝并返回 `ErrRevisionMismatch`，避免静默覆盖
+- **不做严格校验**（见 §6.6）
+
+**PublishVersion 语义**：
+
+- 入参只有 `versionID + publishedBy`，**不带 DSL**——只负责把已存在的某条 version 翻为 release
+- 校验该 version 必须是该 Definition 内的 head（`Version` 号最大）；非 head 返回 `ErrNotHead`
+- 若该 version 已是 release → **幂等成功**（同一 versionID 重复 publish 安全）
+- 若该 version 是 draft → 做严格校验（见 §6.6），通过后：
+  - `UPDATE versions SET state='release', published_at=NOW(), published_by=$1 WHERE id=$VersionID`
+  - 同事务 `UPDATE definitions SET draft_version_id=NULL, published_version_id=$VersionID WHERE id=$DefID`
+- 不复制 DSL、不新增 row、`Version` / `Revision` 不变
+
+**"保存并发布"组合用例**（application 层持有，本 spec 不展开实现细节）：
+
+- 在单个 DB 事务内顺序调：`SaveVersion(defID, dsl, expRev)` → 拿返回的 `*WorkflowVersion` → `PublishVersion(version.ID, publishedBy)`
+- 共享一个事务上下文 → 行锁串行化并发的"保存并发布"，杜绝"Alice 保存后被 Bob 抢先覆盖、再被 Alice 发布"的 race
+- 任一步失败整事务回滚
+- 本 spec 对 domain 层的硬约束：**仓储方法不能在内部各自起事务**，必须接受外部传入的事务上下文（具体 plumbing 形态——`context.Context` 携带 `*sql.Tx` / `WithTx(tx)` 包装层等——由 application 层 spec 决定）
+
+**DiscardDraft 语义**：
+
+- 若当前有 draft：`DELETE FROM versions WHERE id=$DraftID AND state='draft'`，并 `Definition.DraftVersionID` 置 nil
+- 若当前无 draft：**静默成功（幂等）**，不返回错误
+- 已存在的、绑该 draft 的 try-run 行**不动**（`NodeRun` 历史保留，便于审计）
+- 后续若再 `SaveVersion`，新 draft 的 `Version` 由当前剩余 row 的 `max(Version)+1` 计算，号段可能"复用"——有意简化（discard 即遗忘）
+
+**运行绑定**：触发器（webhook / api / cron）只读 `Definition.PublishedVersionID`，draft 绝不会被自动触发选中。
+UI 允许"试运行 draft"——走 `RunService.Start(versionID=<draftID>)` 的手动分支，Run 上标 `TriggerKind=manual`。
+引擎在 `Start` 入口处把 `WorkflowVersion.DSL` 快照到内存执行上下文，运行期间对该 draft 的 `SaveVersion` / `DiscardDraft` 不影响 in-flight run。
 
 ### 6.2 Node
 
@@ -290,6 +346,25 @@ vars.<key>            ← SetVariable 节点显式写入
 
 `{{var}}` 模板里写的是 **Name 级路径**（`{{nodes.llm1.text}}`）——这是给用户的、用 name 方便；
 结构化 `RefValue` 写的是 **PortID**——这是给机器的、稳定。两者在前端编辑时互相转换。
+
+### 6.6 DSL 校验时机
+
+| 操作                  | 校验严格度                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `SaveVersion`         | 宽松：JSON 合法 + 能反序列化为 `WorkflowDSL` 即接受。允许悬空引用、缺必填输入、孤立节点、未知 NodeType |
+| `PublishVersion`      | 严格：见下表，逐项验证，任一失败即拒绝并一次性返回所有违例（在组合事务中即触发回滚）        |
+| Try-Run（手动跑 draft） | 宽松同 `SaveVersion`；运行时 Engine / Executor 自然报错                                     |
+
+**严格校验规则**（`PublishVersion` 必过）：
+
+1. 至少 1 个 `builtin.start`、至少 1 个 `builtin.end`
+2. 所有 `Node.ID` / `Edge.ID` / `PortID` 在 DSL 内唯一
+3. 所有 `Edge.From/To`、`RefValue.NodeID`、`RefValue.PortID` 指向 DSL 内真实存在的节点 / 端口
+4. 所有 `Edge.FromPort` 是源节点 NodeType 声明的端口
+5. 所有 `Required=true` 的输入端口都绑了非空 `ValueSource`
+6. 所有 `Node.TypeKey` 能在 `NodeTypeRegistry` 解析到（含插件 NodeType）
+7. `OnFinalFail=fallback` 仅出现在声明了 `default` 端口的 NodeType 上（与 §10.2 不变式一致）
+8. 节点之间不存在控制流环（v1 循环只能由 `builtin.loop` 节点承载）
 
 ## 7. NodeType 目录
 
@@ -848,9 +923,25 @@ type WorkflowRepository interface {
 
     // Version
     GetVersion(ctx context.Context, id string) (*WorkflowVersion, error)
-    ListVersions(ctx context.Context, definitionID string) ([]*WorkflowVersion, error)
-    SaveDraft(ctx context.Context, definitionID string, dsl WorkflowDSL) error
-    PublishDraft(ctx context.Context, definitionID string, publishedBy string) (*WorkflowVersion, error)
+    ListVersions(ctx context.Context, definitionID string) ([]*WorkflowVersion, error) // 按 Version 倒序，含 draft
+
+    // SaveVersion：保存（创建或覆盖）头部 draft；保存的 version 状态默认为 draft。
+    //   - head 为 draft → 原地覆盖
+    //   - head 为 release（或无任何 version）→ append 一条新 draft（Version=max+1, Revision=1）
+    // expectedRevision：head 为 draft 时必须等于其 Revision；head 非 draft（含无 version）时传 0。
+    // 不匹配返回 ErrRevisionMismatch（带服务端 latest revision 便于前端冲突提示）。
+    SaveVersion(ctx context.Context, definitionID string, dsl WorkflowDSL, expectedRevision int) (*WorkflowVersion, error)
+
+    // PublishVersion：把指定 version 翻为 release。入参不带 DSL。
+    //   - versionID 必须是该 Definition 的 head（最大 Version 号）；否则返回 ErrNotHead
+    //   - 已是 release → 幂等成功
+    //   - 是 draft → 严格校验（见 §6.6），通过后翻 state；失败返回 ErrDraftValidation
+    // "保存并发布"按钮由 application 层用单事务组合 SaveVersion + PublishVersion 实现。
+    PublishVersion(ctx context.Context, versionID, publishedBy string) (*WorkflowVersion, error)
+
+    // DiscardDraft：若有 draft 则硬删并清 Definition.DraftVersionID；
+    // 若无 draft 则静默成功（幂等，不返回错误）。
+    DiscardDraft(ctx context.Context, definitionID string) error
 }
 ```
 
@@ -889,7 +980,10 @@ type WorkflowRunRepository interface {
 - **Status 单调**：`WorkflowRun.Status` 不能从终态（success/failed/cancelled）回退到 running。
 - **NodeRun 归属**：`NodeRun.RunID` 必须存在；`(RunID, NodeID, Attempt)` 唯一。
 - **EndNodeID 一致**：`Status == success` 时 `EndNodeID` 非空且 DSL 里确实有该 End 节点。
-- **Draft 与 Published 不重叠**：一个 `WorkflowVersion` 要么是 Draft 要么是 Published，`IsDraft=true` 时 `PublishedAt` 必为 nil。
+- **Draft 与 Release 互斥**：`WorkflowVersion.State` 要么 `draft` 要么 `release`；`State=draft` 时 `PublishedAt` / `PublishedBy` 必为 nil。
+- **至多一条 draft**：同一 Definition 下 `State=draft` 的 `WorkflowVersion` 最多 1 条；若存在，其 `Version` 号 ≥ 该 Definition 内所有 `release` 版本的 `Version` 号。
+- **Release 不可变**：`State=release` 后该 Version 的 `DSL` / `Version` / `Revision` / `PublishedAt` / `PublishedBy` 全部冻结，仓储层不暴露任何修改入口。
+- **只能发布 head**：`PublishVersion` 仅接受该 Definition 内 `Version` 号最大的那条 version；非 head 不可被发布（draft 永远是 head；非 head 必为 release，已 release 不重发）。
 - **Credential 密文不出域**：`Credential.EncryptedPayload` 只允许 `CredentialResolver` 读取，不得出现在 `ResolvedInputs/Config` 中。
 - **NodeType 不建表**：`NodeTypeRegistry` 实现不得写任何 NodeType 表；所有 NodeType 由内置 + 插件投影得到。
 
@@ -899,7 +993,7 @@ type WorkflowRunRepository interface {
 
 | 名字                         | 类型                  | 谁的版本                     | v1 形态                    |
 | ---------------------------- | --------------------- | ---------------------------- | -------------------------- |
-| `WorkflowVersion.Version`    | `int`                 | 用户工作流的发布版本         | 单调递增整数；Draft 恒为 0 |
+| `WorkflowVersion.Version`    | `int`                 | 用户工作流的版本号（draft / release 共用） | 同 Definition 内单调递增；discard 后号段可复用 |
 | `NodeType.Version`           | `string`              | NodeType 契约本身的版本      | v1 全填 `"1"`              |
 | `WorkflowDSL.$schemaVersion` | `string`（JSON 字段） | DSL 序列化结构的 schema 版本 | v1 固定 `"1"`              |
 
