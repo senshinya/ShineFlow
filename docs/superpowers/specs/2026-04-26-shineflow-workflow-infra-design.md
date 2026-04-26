@@ -6,7 +6,7 @@
 
 ## 1. 目标
 
-> PostgreSQL ≥ 14（partial unique index、`FOR UPDATE SKIP LOCKED`、`gen_random_uuid()` 都需要 ≥ 13）。
+> PostgreSQL ≥ 12（partial unique index 与 `FOR UPDATE SKIP LOCKED` 老版本就有；UUID 由 Go 端 `github.com/google/uuid` 的 `uuid.NewV7()` 生成，不依赖 PG 函数）。
 
 把 domain 层定义的 5 个 aggregate 的仓储接口落地为 PostgreSQL + GORM 实现，包括：
 
@@ -506,7 +506,7 @@ func toDefinitionModel(d *workflow.WorkflowDefinition) *definitionModel { ... }
 
 ### 7.2 ID 与时间戳
 
-约定：repo **不**生成 ID、**不**设时间戳。entity 进入 repo 时 `ID / CreatedAt / UpdatedAt` 由 application 层填好（UUIDv7 + `time.Now()`）。Update 路径同理。
+约定：repo **不**生成 ID、**不**设时间戳。entity 进入 repo 时 `ID / CreatedAt / UpdatedAt` 由 application 层填好（`github.com/google/uuid` 的 `uuid.NewV7().String()` + `time.Now()`）。Update 路径同理。
 
 好处：
 - 测试时调用方注入确定值
