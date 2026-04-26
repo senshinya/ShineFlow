@@ -5,7 +5,7 @@
 // 子包索引：
 //
 //   workflow         工作流定义聚合（Definition / Version / DSL / Node / Edge / 端口 / 值源 / 错误策略）
-//   workflow/check   WorkflowDSL 严格校验（PublishVersion 时调用，独立子包以避免循环依赖）
+//   validator        WorkflowDSL 严格校验（PublishVersion 时调用，独立子包以避免循环依赖）
 //   nodetype         NodeType 统一目录与 Registry 接口；含 HttpPlugin / McpTool 投影函数
 //   run              工作流运行时聚合（WorkflowRun / NodeRun + 状态机 + context 投影）
 //   cron             定时触发器聚合 CronJob

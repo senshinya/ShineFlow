@@ -1,7 +1,7 @@
-// Package check 实现 WorkflowDSL 的严格校验（PublishVersion 时必过）。
+// Package validator 实现 WorkflowDSL 的严格校验（PublishVersion 时必过）。
 //
 // 本包独立于 domain/workflow，避免引入 workflow → nodetype → workflow 的循环依赖。
-package check
+package validator
 
 import (
 	"fmt"

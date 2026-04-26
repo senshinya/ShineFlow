@@ -14,7 +14,7 @@ var (
 	// ErrNotHead PublishVersion 指向的 versionID 不是该 Definition 的 head（最大 Version 号）。
 	ErrNotHead = errors.New("workflow: not head version")
 
-	// ErrDraftValidation PublishVersion 时严格校验失败；调用方应配合 check.ValidationError 拿详情。
+	// ErrDraftValidation PublishVersion 时严格校验失败；调用方应配合 validator.ValidationError 拿详情。
 	ErrDraftValidation = errors.New("workflow: draft validation failed")
 
 	// ErrDefinitionNotFound / ErrVersionNotFound 通用查不到。
@@ -64,7 +64,7 @@ type WorkflowRepository interface {
 	//
 	//   - versionID 必须是该 Definition 的 head（最大 Version 号），否则返回 ErrNotHead
 	//   - 已是 release → 幂等成功（同一 versionID 重复 publish 安全）
-	//   - 是 draft → 走严格校验（domain/workflow/check.ValidateForPublish），失败返回
+	//   - 是 draft → 走严格校验（domain/validator.ValidateForPublish），失败返回
 	//     ErrDraftValidation（外层应包装具体的 ValidationError 列表）
 	//
 	// 校验通过后：
