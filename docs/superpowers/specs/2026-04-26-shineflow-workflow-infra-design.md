@@ -41,6 +41,7 @@
 - 多租户 / 行级权限 / 审计日志
 - 软删行的 GC（清理 N 天前 `deleted_at IS NOT NULL`）
 - Read replica 实际接入（spec 只预留 `dbresolver.Write` 路由钩子）
+- **Draft try-run 的持久化**：`workflow_runs` 表只承载 release version 的运行；草稿试跑由后续 spec 独立处理（候选方案：内存态 / 专用 try_runs 表）
 
 ## 3. 架构决策总览
 
@@ -50,7 +51,7 @@
 | 2   | GORM model 与 domain entity 通过 `mapper.go` 转换，不让 GORM tag 污染 domain 类型     | domain 保持 GORM-agnostic                                           |
 | 3   | ID 由 application 层生成（UUIDv7），repo 不生成 ID，不设时间戳                         | 测试可注入确定值；事务内多写时间戳一致                              |
 | 4   | `WorkflowDSL` 整列 JSONB；`ValueSource.Value` 自定义 `UnmarshalJSON` 按 `Kind` 分发   | DSL 是聚合内整体快照；查询模式只有"按 versionID 拿整 DSL"            |
-| 5   | 所有用户可见删除 = 软删（`deleted_at`），FK 上 **不**加 `ON DELETE CASCADE`           | 保留运行历史；级联删除会让"指向已删行"语义模糊                      |
+| 5   | 软删 5 张表（`workflow_definitions` / `cron_jobs` / `http_plugins` / `mcp_servers` / `credentials`）；`workflow_versions` 的 draft 走硬删（无审计价值），release 永不删；FK 全部不带 `ON DELETE CASCADE` | 保留运行历史；级联会让"指向已删行"语义模糊；draft 是临时态，硬删干净 |
 | 6   | repo 写方法的多 SQL / 读+写路径，方法内部 `storage.DBTransaction(ctx, fn)` 自包       | application 层不需要记忆"哪些方法需要事务"，self-tx 嵌套幂等        |
 | 7   | 单条写直接 `storage.GetDB(ctx)`，dbresolver 按 op 自动路由到写库                      | 无需为 trivial 写包 tx                                              |
 | 8   | 状态机校验编码进 `UPDATE ... WHERE status IN (允许的 prev)`，单语句乐观锁              | 0 行影响即冲突，避免读-改-写竞态                                    |
@@ -143,12 +144,11 @@ CREATE TABLE workflow_versions (
     published_by    TEXT,
     created_at      TIMESTAMPTZ NOT NULL,
     updated_at      TIMESTAMPTZ NOT NULL,
-    deleted_at      TIMESTAMPTZ,
     UNIQUE (definition_id, version)
 );
--- 同一 definition 至多一个"活的" draft
+-- 同一 definition 至多一个 draft（DiscardDraft 走硬删，无需 deleted_at 过滤）
 CREATE UNIQUE INDEX uq_workflow_versions_one_draft
-    ON workflow_versions (definition_id) WHERE state = 'draft' AND deleted_at IS NULL;
+    ON workflow_versions (definition_id) WHERE state = 'draft';
 CREATE INDEX idx_workflow_versions_definition ON workflow_versions (definition_id, version DESC);
 
 -- ============================================================
@@ -298,11 +298,15 @@ CREATE UNIQUE INDEX uq_credentials_name ON credentials (name) WHERE deleted_at I
 
 ### 5.1 设计说明
 
-- **软删的 6 张表**：`workflow_definitions` / `workflow_versions` / `cron_jobs` / `http_plugins` / `mcp_servers` / `credentials`。GORM model 端用 `gorm.DeletedAt` 类型，自动给所有 SELECT 加 `WHERE deleted_at IS NULL`，自动把 `db.Delete(&m)` 转成 UPDATE。
-- **不软删的 3 张**：`workflow_runs` / `workflow_node_runs` 是纯历史，从不删；`mcp_tools` 由 sync 行为整体替换，不是用户语义的删除。
-- **FK 全部不带 `ON DELETE CASCADE`**：因为软删后 parent 行永远不真正消失，FK 始终 valid；强引用只用于"运行时绝不能悬空"的关系（version → definition、run → definition+version、node_run → run、tool → server）。
+- **软删的 5 张表**：`workflow_definitions` / `cron_jobs` / `http_plugins` / `mcp_servers` / `credentials`。GORM model 端用 `gorm.DeletedAt` 类型，自动给所有 SELECT 加 `WHERE deleted_at IS NULL`，自动把 `db.Delete(&m)` 转成 UPDATE。
+- **不软删的 4 张**：
+  - `workflow_versions`：draft 由 `DiscardDraft` 硬删（草稿无审计价值）；release 永不删（用户没有删 release 的入口）。
+  - `workflow_runs` / `workflow_node_runs`：纯历史，从不删。
+  - `mcp_tools`：由 sync 行为整体替换，不是用户语义的删除。
+- **`workflow_runs` 只承载 release run**：draft 试跑不落本表（见 §2 Out of Scope）；因此 `workflow_runs.version_id → workflow_versions(id)` 的 FK 永远 valid——它只可能指向 release 行，而 release 永不删。
+- **FK 全部不带 `ON DELETE CASCADE`**：因为软删后 parent 行永远不真正消失（5 张软删表的 FK target），或 parent 永不删（version → definition 的 release 端、run → definition+version、node_run → run、tool → server）。
 - **弱引用不加 FK**：`workflow_definitions.{draft_version_id, published_version_id}`、`cron_jobs.last_run_id`、`http_plugins.credential_id`、`mcp_servers.credential_id`。这些是"指向最新一个"的指针，加 FK 反而要在删除时处理循环依赖。代码层面保证一致性。
-- **`workflow_versions` UNIQUE (definition_id, version) 不带 `deleted_at` 过滤**：version 号严格单调不复用，软删的 draft v3 不会让新 draft 也叫 v3。
+- **`workflow_versions` UNIQUE (definition_id, version)**：version 号严格单调不复用。draft 硬删后 v3 这个号也不再回收（直接进 v4），保持单调性。
 - **Name 类 unique 索引带 `WHERE deleted_at IS NULL`**：删了同名能再创建。
 - **`schema.sql` 单文件**：9 张表手动灌即可（`psql $DSN -f schema.sql`），将来上迁移工具时再按表拆。
 
@@ -534,7 +538,7 @@ func toDefinitionModel(d *workflow.WorkflowDefinition) *definitionModel { ... }
 **需要 self-tx**：
 - `WorkflowRepository.SaveVersion`：读 head → update or insert
 - `WorkflowRepository.PublishVersion`：校验 head + update version state + update definition 两表
-- `WorkflowRepository.DiscardDraft`：read draft + 软删 + 清 definition.draft_version_id
+- `WorkflowRepository.DiscardDraft`：DELETE draft 行 + 清 definition.draft_version_id
 - `McpToolRepository.UpsertAll`：删失踪 + upsert 现有
 
 **需要外部 tx**（不能自包）：
@@ -610,19 +614,19 @@ func (r *workflowRepo) SaveVersion(
 
 未列出的私有 helper（`r.insertNewDraft` / `r.getVersionWithinTx` 等）是实现细节，约定 helper 不再自包 tx——它们假定调用方已经在事务里，直接 `storage.GetDB(ctx)` 拿 tx 句柄。命名上以 `WithinTx` / `*` 后缀提示。
 
-### 7.6 DiscardDraft 行为变更
+### 7.6 DiscardDraft（硬删）
 
-domain 注释原写"硬删 draft 行"，本 spec 改为软删：
+domain 注释原本就是"硬删 draft 行"，本 spec 保持不变。SQL 形态：
 
 ```sql
-UPDATE workflow_versions SET deleted_at = NOW(), updated_at = NOW()
-WHERE definition_id = $1 AND state = 'draft' AND deleted_at IS NULL;
+DELETE FROM workflow_versions
+WHERE definition_id = $1 AND state = 'draft';
 
 UPDATE workflow_definitions SET draft_version_id = NULL, updated_at = NOW()
 WHERE id = $1;
 ```
 
-效果对用户等价（草稿消失），但 try-run 历史里的 `version_id` 引用始终 valid。`domain/workflow/repository.go` 对应注释要随之微调（spec 落地时一起改）。
+两条放在 `storage.DBTransaction(ctx, fn)` 里执行。draft 没有 try-run 引用（draft 试跑不落 `workflow_runs`，见 §2），FK 不会触发；release version 不可能撞到 draft 的硬删路径。
 
 ### 7.7 构造函数
 
@@ -843,9 +847,8 @@ func WithTx(ctx context.Context, tx *gorm.DB) context.Context {
 
 1. `domain/workflow/value.go`：`ValueSource` 加 `MarshalJSON` / `UnmarshalJSON`，import `infrastructure/util`
 2. `domain/workflow/dsl.go` / `value.go` / `port.go` / `error_policy.go` / `node_ui.go`：所有 struct 字段加 `json:"snake_case"` tag
-3. `domain/workflow/repository.go` 的 `DiscardDraft` 注释从"硬删"改为"软删"
-4. `domain/run/repository.go` 新增 sentinel：`ErrInvalidStateTransition`
-5. `domain/doc.go`：禁止依赖说明微调（允许 `infrastructure/util` 这一层薄封装）
+3. `domain/run/repository.go` 新增 sentinel：`ErrInvalidStateTransition`
+4. `domain/doc.go`：禁止依赖说明微调（允许 `infrastructure/util` 这一层薄封装）
 
 ## 12. 验收清单
 
@@ -853,7 +856,7 @@ func WithTx(ctx context.Context, tx *gorm.DB) context.Context {
 - [ ] `infrastructure/storage/{workflow,run,cron,plugin,credential}/` 各自实现 domain 接口；`go build ./...` 通过
 - [ ] 每个 repo 包的 `_test.go` 覆盖 §8.3 的底线
 - [ ] `storage.UseDB` / `storage.WithTx` / `storagetest.Setup` 可用
-- [ ] domain §11 的 5 项改动落地
+- [ ] domain §11 的 4 项改动落地
 - [ ] `SHINEFLOW_CRED_KEY` 缺失时 `NewResolver` 返回 error；service 启动失败
 - [ ] `go test ./infrastructure/storage/...` 全绿（CI 上 GitHub Actions runner 自带 Docker）
 - [ ] `go vet ./...` / `go build ./...` 全绿
