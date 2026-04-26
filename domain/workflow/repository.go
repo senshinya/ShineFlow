@@ -14,7 +14,9 @@ var (
 	// ErrNotHead PublishVersion 指向的 versionID 不是该 Definition 的 head（最大 Version 号）。
 	ErrNotHead = errors.New("workflow: not head version")
 
-	// ErrDraftValidation PublishVersion 时严格校验失败；调用方应配合 validator.ValidationError 拿详情。
+	// ErrDraftValidation draft 在 publish 之前严格校验失败的 sentinel。
+	// 由 application 层在调 PublishVersion 之前跑 domain/validator.ValidateForPublish 时产生（详情包成 validator.ValidationError 列表）。
+	// 仓储层不返回此 error。
 	ErrDraftValidation = errors.New("workflow: draft validation failed")
 
 	// ErrDefinitionNotFound / ErrVersionNotFound 通用查不到。
@@ -65,10 +67,12 @@ type WorkflowRepository interface {
 	//
 	//   - versionID 必须是该 Definition 的 head（最大 Version 号），否则返回 ErrNotHead
 	//   - 已是 release → 幂等成功（同一 versionID 重复 publish 安全）
-	//   - 是 draft → 走严格校验（domain/validator.ValidateForPublish），失败返回
-	//     ErrDraftValidation（外层应包装具体的 ValidationError 列表）
+	//   - 是 draft → 直接转 release。仓储**不再**内嵌 DSL 严格校验：
+	//     调用方（application 层）应在 PublishVersion 之前调一次
+	//     domain/validator.ValidateForPublish，失败时由 application 层包装并返回
+	//     ErrDraftValidation。仓储侧假设 caller 已校验通过。
 	//
-	// 校验通过后：
+	// SQL 形态：
 	//   UPDATE versions SET state='release', published_at=NOW(), published_by=$1 WHERE id=$VersionID
 	//   UPDATE definitions SET draft_version_id=NULL, published_version_id=$VersionID WHERE id=$DefID
 	PublishVersion(ctx context.Context, versionID, publishedBy string) (*WorkflowVersion, error)

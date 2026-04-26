@@ -11,8 +11,10 @@ var (
 	ErrRunNotFound     = errors.New("run: workflow run not found")
 	ErrNodeRunNotFound = errors.New("run: node run not found")
 
-	// ErrIllegalStatusTransition 是仓储在 UpdateStatus / UpdateNodeRunStatus 时
-	// 通过 RunStatus.CanTransitionTo / NodeRunStatus.CanTransitionTo 判定失败时返回的哨兵 error。
+	// ErrIllegalStatusTransition 仓储在 UpdateStatus / UpdateNodeRunStatus 检测到
+	// 当前状态不允许转到目标状态时返回的哨兵 error。
+	// 校验语义对齐 RunStatus.CanTransitionTo / NodeRunStatus.CanTransitionTo；
+	// 实现可选择直接调这两个方法，或把允许的前置状态编码进 SQL 的 WHERE 子句（单语句乐观锁），二者等价。
 	ErrIllegalStatusTransition = errors.New("run: illegal status transition")
 )
 
@@ -73,8 +75,8 @@ func WithNodeRunExternalRefs(refs []ExternalRef) NodeRunUpdateOpt {
 //
 // 关键约束：
 //   - 所有写入 NodeRun 的方法必须经由本接口（NodeRun 非独立聚合根）
-//   - UpdateStatus / UpdateNodeRunStatus 在写库前必须用 CanTransitionTo 校验，
-//     不合法时返回 ErrIllegalStatusTransition
+//   - UpdateStatus / UpdateNodeRunStatus 必须保证状态机语义，不合法转移返回 ErrIllegalStatusTransition；
+//     实现细节自由（直接调 CanTransitionTo，或把允许的前置状态编码进 SQL 的 WHERE 单语句乐观锁皆可）
 type WorkflowRunRepository interface {
 	// WorkflowRun
 	Create(ctx context.Context, run *WorkflowRun) error
