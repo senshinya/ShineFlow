@@ -10,9 +10,9 @@ import (
 
 func main() {
 	cfg := config.Load()
-	db := storage.MustInit(cfg.DBDSN)
+	storage.MustInit(cfg.DBDSN)
 
 	h := server.New(server.WithHostPorts(":" + cfg.Port))
-	httpfacade.Register(h, db)
+	httpfacade.Register(h)
 	h.Spin()
 }

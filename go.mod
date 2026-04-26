@@ -7,6 +7,7 @@ require (
 	github.com/cloudwego/hertz v0.10.4
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
+	gorm.io/plugin/dbresolver v1.6.2
 )
 
 require (

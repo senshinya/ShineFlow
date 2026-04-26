@@ -2,11 +2,10 @@ package http
 
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
-	"gorm.io/gorm"
 
 	"github.com/shinya/shineflow/facade/http/handler"
 )
 
-func Register(h *server.Hertz, _ *gorm.DB) {
+func Register(h *server.Hertz) {
 	h.GET("/ping", handler.Ping)
 }
