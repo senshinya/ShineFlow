@@ -45,9 +45,9 @@ func (s NodeRunStatus) CanTransitionTo(next NodeRunStatus) bool {
 
 // NodeError 是 NodeRun 失败时的错误现场。fallback 生效时仍保留最后一次 NodeError，便于审计。
 type NodeError struct {
-	Code    string
-	Message string
-	Details json.RawMessage
+	Code    string          `json:"code"`
+	Message string          `json:"message"`
+	Details json.RawMessage `json:"details,omitempty"`
 }
 
 // 常用 NodeError.Code。
@@ -60,8 +60,8 @@ const (
 
 // ExternalRef 记录节点执行过程中的外部调用 ID（LLM trace_id / HTTP request_id / MCP tool_call_id）。
 type ExternalRef struct {
-	Kind string // "llm_call" | "http_request" | "mcp_tool"
-	Ref  string
+	Kind string `json:"kind"` // "llm_call" | "http_request" | "mcp_tool"
+	Ref  string `json:"ref"`
 }
 
 // NodeRun 是 WorkflowRun 聚合内的子实体。

@@ -32,10 +32,11 @@ type DefinitionFilter struct {
 
 // WorkflowRepository 是 WorkflowDefinition / WorkflowVersion 聚合的仓储契约。
 //
-// 关键事务约束（由 application 层 spec 决定具体 plumbing 形态）：
-//   - SaveVersion / PublishVersion / DiscardDraft 实现内部不得各自起事务，
-//     必须接受外部传入的事务上下文，便于 application 层把 SaveVersion + PublishVersion
-//     组合成"保存并发布"用例时共享同一事务、串行化并发请求。
+// 关键事务约束（由 infra spec 落地）：
+//   - SaveVersion / PublishVersion / DiscardDraft 内部需要原子性，
+//     允许实现自包 storage.DBTransaction（嵌套对外部 tx 幂等复用）。
+//   - application 层若把 SaveVersion + PublishVersion 组合成"保存并发布"用例，
+//     在外层显式 storage.DBTransaction 一次包住，内层 self-tx 自动复用同一 tx。
 type WorkflowRepository interface {
 	// Definition
 	CreateDefinition(ctx context.Context, def *WorkflowDefinition) error

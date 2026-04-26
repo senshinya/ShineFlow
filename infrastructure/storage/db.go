@@ -78,3 +78,13 @@ func DBTransaction(ctx context.Context, fn func(ctx context.Context) error) erro
 		return fn(context.WithValue(ctx, keyDBTx, tx))
 	})
 }
+
+// UseDB 仅供 test 使用：覆盖 package-level db 单例。
+// prod 路径不应调用。
+func UseDB(d *gorm.DB) { db = d }
+
+// WithTx 把 tx 注入 ctx 的 keyDBTx。
+// prod 内部 DBTransaction 已在做这件事；export 出来给 test 用。
+func WithTx(ctx context.Context, tx *gorm.DB) context.Context {
+	return context.WithValue(ctx, keyDBTx, tx)
+}

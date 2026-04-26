@@ -18,30 +18,30 @@ const DSLSchemaVersion = "1"
 //   - Inputs   key 是 NodeType.InputSchema 中 PortSpec.ID（不是 Name！）
 //   - Config   是符合 NodeType.ConfigSchema 的 JSON；其中字符串字段允许 {{var}} 模板
 type Node struct {
-	ID      string
-	TypeKey string
-	TypeVer string
-	Name    string
+	ID      string                 `json:"id"`
+	TypeKey string                 `json:"type_key"`
+	TypeVer string                 `json:"type_ver"`
+	Name    string                 `json:"name"`
 
-	Config json.RawMessage
-	Inputs map[string]ValueSource
+	Config json.RawMessage        `json:"config,omitempty"`
+	Inputs map[string]ValueSource `json:"inputs,omitempty"`
 
-	ErrorPolicy *ErrorPolicy
-	UI          NodeUI
+	ErrorPolicy *ErrorPolicy `json:"error_policy,omitempty"`
+	UI          NodeUI       `json:"ui"`
 }
 
 // Edge 是节点之间的控制流边。本系统采用 context-passing 模型，目标节点直接读共享变量表，
 // 因此不需要 ToPort，只声明源节点的输出端口。
 //   - FromPort 取值来自源节点 NodeType.Ports（含保留端口 default / error）
 type Edge struct {
-	ID       string
-	From     string
-	FromPort string
-	To       string
+	ID       string `json:"id"`
+	From     string `json:"from"`
+	FromPort string `json:"from_port"`
+	To       string `json:"to"`
 }
 
 // WorkflowDSL 是工作流的"纯图"形态：不含名称 / 描述 / 版本号 / 时间戳。
 type WorkflowDSL struct {
-	Nodes []Node
-	Edges []Edge
+	Nodes []Node `json:"nodes"`
+	Edges []Edge `json:"edges"`
 }

@@ -6,11 +6,11 @@ package workflow
 // PortSpec 描述某个 NodeType / 插件输入或输出端口的静态契约。
 // ID 是 DSL 中跨节点引用使用的稳定标识；Name 仅用于展示。
 type PortSpec struct {
-	ID       string
-	Name     string
-	Type     SchemaType
-	Required bool
-	Desc     string
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Type     SchemaType `json:"type"`
+	Required bool       `json:"required"`
+	Desc     string     `json:"desc,omitempty"`
 }
 
 // SchemaType 是 PortSpec.Type 使用的最小 JSON Schema 子集，支持嵌套。
@@ -18,10 +18,10 @@ type PortSpec struct {
 //   - Type == "array"  时使用 Items
 //   - Enum 仅对 string / number / integer 生效
 type SchemaType struct {
-	Type       string
-	Properties map[string]*SchemaType
-	Items      *SchemaType
-	Enum       []any
+	Type       string                 `json:"type"`
+	Properties map[string]*SchemaType `json:"properties,omitempty"`
+	Items      *SchemaType            `json:"items,omitempty"`
+	Enum       []any                  `json:"enum,omitempty"`
 }
 
 // 允许的 SchemaType.Type 字面量。

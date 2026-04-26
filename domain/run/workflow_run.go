@@ -49,11 +49,11 @@ func (s RunStatus) CanTransitionTo(next RunStatus) bool {
 
 // RunError 是 WorkflowRun 失败时的错误现场。
 type RunError struct {
-	NodeID    string
-	NodeRunID string
-	Code      string
-	Message   string
-	Details   json.RawMessage
+	NodeID    string          `json:"node_id"`
+	NodeRunID string          `json:"node_run_id"`
+	Code      string          `json:"code"`
+	Message   string          `json:"message"`
+	Details   json.RawMessage `json:"details,omitempty"`
 }
 
 // 常用 RunError.Code。

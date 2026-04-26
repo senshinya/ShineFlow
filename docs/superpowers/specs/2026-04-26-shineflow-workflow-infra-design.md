@@ -552,7 +552,7 @@ func toDefinitionModel(d *workflow.WorkflowDefinition) *definitionModel { ... }
 | `gorm.ErrRecordNotFound` 在 `GetVersion`                                          | `workflow.ErrVersionNotFound`   |
 | `SaveVersion` 中 `expectedRevision` 与预读出来的 head.Revision 不一致；或 `UPDATE ... WHERE revision=?` 返回 `RowsAffected=0`（并发覆盖） | `workflow.ErrRevisionMismatch`  |
 | `PublishVersion` 时 versionID ≠ head                                              | `workflow.ErrNotHead`           |
-| `PublishVersion` 时 draft 校验失败                                                | `workflow.ErrDraftValidation`（外层包一份 `validator.ValidationResult.Errors`） |
+| `PublishVersion` 时 draft 校验失败                                                | `workflow.ErrDraftValidation` —— 但**校验已上移到 application 层**（需要注入 NodeTypeRegistry，属于另一份 spec）。repo 不再调 `validator.ValidateForPublish`，假设 caller 已经跑过；该 sentinel 由 application 层返回 |
 | `RunRepository.UpdateStatus` 等状态机方法 `RowsAffected=0` 且行存在               | `run.ErrIllegalStatusTransition`（domain 已有） |
 | 其他 PG / GORM 错误（unique 违反等"理论不该出现"的）                              | `fmt.Errorf("xxx repo: %w", err)` 透传                              |
 

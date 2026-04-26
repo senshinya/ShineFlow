@@ -18,6 +18,8 @@
 // 不在 domain：各 port 的具体适配器（infrastructure/http、infrastructure/llm、
 // infrastructure/mcp、infrastructure/sandbox）和 Registry 装配函数。
 //
-// 禁止：依赖任何外部框架（hertz / gorm / sonic 等）。
+// 禁止：直接依赖 hertz / gorm 等外部框架。
+// JSON 序列化通过 infrastructure/util 这一层薄封装走，使全项目 JSON 入口统一。
+// 该 import 是有意破例（不构成"domain 依赖外部框架"的反例）。
 // 仓储实现位于 infrastructure 层。
 package domain

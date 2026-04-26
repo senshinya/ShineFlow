@@ -21,11 +21,11 @@ const (
 
 // ErrorPolicy 描述节点的超时 / 重试 / 兜底策略。Node.ErrorPolicy 为 nil 时引擎使用默认策略。
 type ErrorPolicy struct {
-	Timeout      time.Duration
-	MaxRetries   int
-	RetryBackoff BackoffKind
-	RetryDelay   time.Duration
+	Timeout      time.Duration `json:"timeout,omitempty"`
+	MaxRetries   int           `json:"max_retries,omitempty"`
+	RetryBackoff BackoffKind   `json:"retry_backoff,omitempty"`
+	RetryDelay   time.Duration `json:"retry_delay,omitempty"`
 
-	OnFinalFail    FailStrategy
-	FallbackOutput map[string]any
+	OnFinalFail    FailStrategy   `json:"on_final_fail,omitempty"`
+	FallbackOutput map[string]any `json:"fallback_output,omitempty"`
 }
