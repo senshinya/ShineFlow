@@ -553,7 +553,7 @@ func toDefinitionModel(d *workflow.WorkflowDefinition) *definitionModel { ... }
 | `SaveVersion` 中 `expectedRevision` 与预读出来的 head.Revision 不一致；或 `UPDATE ... WHERE revision=?` 返回 `RowsAffected=0`（并发覆盖） | `workflow.ErrRevisionMismatch`  |
 | `PublishVersion` 时 versionID ≠ head                                              | `workflow.ErrNotHead`           |
 | `PublishVersion` 时 draft 校验失败                                                | `workflow.ErrDraftValidation`（外层包一份 `validator.ValidationResult.Errors`） |
-| `RunRepository.UpdateStatus` 等状态机方法 `RowsAffected=0` 且行存在               | repo 内 sentinel：`run.ErrInvalidStateTransition`（domain 需新增） |
+| `RunRepository.UpdateStatus` 等状态机方法 `RowsAffected=0` 且行存在               | `run.ErrIllegalStatusTransition`（domain 已有） |
 | 其他 PG / GORM 错误（unique 违反等"理论不该出现"的）                              | `fmt.Errorf("xxx repo: %w", err)` 透传                              |
 
 ### 7.5 SaveVersion 模板（self-tx）
@@ -721,7 +721,7 @@ func TestSaveVersion_NewDraftFromRelease(t *testing.T) {
 每个 repo 包至少：
 - 每条 happy path（Create / Get / Update / Delete / List 正常返回）
 - 每条 sentinel error 路径（`ErrXxxNotFound` / `ErrRevisionMismatch` / `ErrNotHead` / `ErrDraftValidation` / 软删后再创建同名）
-- state-machine 类方法至少一个非法转移（验证 `RowsAffected=0` → 返回 `ErrInvalidStateTransition`）
+- state-machine 类方法至少一个非法转移（验证 `RowsAffected=0` → 返回 `ErrIllegalStatusTransition`）
 
 ### 8.4 容器生命周期
 
@@ -847,7 +847,7 @@ func WithTx(ctx context.Context, tx *gorm.DB) context.Context {
 
 1. `domain/workflow/value.go`：`ValueSource` 加 `MarshalJSON` / `UnmarshalJSON`，import `infrastructure/util`
 2. `domain/workflow/dsl.go` / `value.go` / `port.go` / `error_policy.go` / `node_ui.go`：所有 struct 字段加 `json:"snake_case"` tag
-3. `domain/run/repository.go` 新增 sentinel：`ErrInvalidStateTransition`
+3. ~~`domain/run/repository.go` 新增 sentinel~~：已存在 `ErrIllegalStatusTransition`，repo 实现直接复用，无需新增
 4. `domain/doc.go`：禁止依赖说明微调（允许 `infrastructure/util` 这一层薄封装）
 
 ## 12. 验收清单
@@ -856,7 +856,7 @@ func WithTx(ctx context.Context, tx *gorm.DB) context.Context {
 - [ ] `infrastructure/storage/{workflow,run,cron,plugin,credential}/` 各自实现 domain 接口；`go build ./...` 通过
 - [ ] 每个 repo 包的 `_test.go` 覆盖 §8.3 的底线
 - [ ] `storage.UseDB` / `storage.WithTx` / `storagetest.Setup` 可用
-- [ ] domain §11 的 4 项改动落地
+- [ ] domain §11 的 3 项实质改动落地（JSON tag / ValueSource codec / repository.go 注释 / doc.go；`ErrIllegalStatusTransition` 已存在）
 - [ ] `SHINEFLOW_CRED_KEY` 缺失时 `NewResolver` 返回 error；service 启动失败
 - [ ] `go test ./infrastructure/storage/...` 全绿（CI 上 GitHub Actions runner 自带 Docker）
 - [ ] `go vet ./...` / `go build ./...` 全绿
