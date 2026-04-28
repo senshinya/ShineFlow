@@ -23,29 +23,30 @@ type ValidationError struct {
 
 // 校验违例 Code 常量。
 const (
-	CodeMissingStart                    = "missing_start"
-	CodeMissingEnd                      = "missing_end"
-	CodeDuplicateNodeID                 = "duplicate_node_id"
-	CodeDuplicateEdgeID                 = "duplicate_edge_id"
-	CodeDuplicatePortID                 = "duplicate_port_id"
-	CodeDanglingEdge                    = "dangling_edge"
-	CodeDanglingRef                     = "dangling_ref"
-	CodeUnknownFromPort                 = "unknown_from_port"
-	CodeRequiredInputMissing            = "required_input_missing"
-	CodeUnknownNodeType                 = "unknown_node_type"
-	CodeFallbackOnNonDefaultPortNode    = "fallback_on_non_default_port_node"
-	CodeCycle                           = "cycle"
-	CodeMultipleStarts                  = "multiple_starts"
-	CodeNoPathToEnd                     = "no_path_to_end"
-	CodeIsolatedNode                    = "isolated_node"
-	CodeMultiInputRequiresJoin          = "multi_input_requires_join"
-	CodeJoinInsufficientInputs          = "join_insufficient_inputs"
-	CodeJoinModeInvalid                 = "join_mode_invalid"
-	CodeJoinConfigInvalid               = "join_config_invalid"
-	CodeSwitchCaseNameDuplicate         = "switch_case_name_duplicate"
-	CodeSwitchCaseNameReserved          = "switch_case_name_reserved"
-	CodeFallbackPortInvalid             = "fallback_port_invalid"
-	CodeFireErrorPortRequiresErrorPort  = "fire_error_port_requires_error_port"
+	CodeMissingStart                   = "missing_start"
+	CodeMissingEnd                     = "missing_end"
+	CodeDuplicateNodeID                = "duplicate_node_id"
+	CodeDuplicateEdgeID                = "duplicate_edge_id"
+	CodeDuplicatePortID                = "duplicate_port_id"
+	CodeDanglingEdge                   = "dangling_edge"
+	CodeDanglingRef                    = "dangling_ref"
+	CodeUnknownFromPort                = "unknown_from_port"
+	CodeRequiredInputMissing           = "required_input_missing"
+	CodeUnknownNodeType                = "unknown_node_type"
+	CodeFallbackOnNonDefaultPortNode   = "fallback_on_non_default_port_node"
+	CodeCycle                          = "cycle"
+	CodeMultipleStarts                 = "multiple_starts"
+	CodeNoPathToEnd                    = "no_path_to_end"
+	CodeIsolatedNode                   = "isolated_node"
+	CodeMultiInputRequiresJoin         = "multi_input_requires_join"
+	CodeJoinInsufficientInputs         = "join_insufficient_inputs"
+	CodeJoinModeInvalid                = "join_mode_invalid"
+	CodeJoinConfigInvalid              = "join_config_invalid"
+	CodeSwitchConfigInvalid            = "switch_config_invalid"
+	CodeSwitchCaseNameDuplicate        = "switch_case_name_duplicate"
+	CodeSwitchCaseNameReserved         = "switch_case_name_reserved"
+	CodeFallbackPortInvalid            = "fallback_port_invalid"
+	CodeFireErrorPortRequiresErrorPort = "fire_error_port_requires_error_port"
 )
 
 // ValidationResult 是 ValidateForPublish 的返回值，一次性收集所有违例。
@@ -92,7 +93,6 @@ func ValidateForPublish(dsl workflow.WorkflowDSL, reg nodetype.NodeTypeRegistry)
 	errs = append(errs, checkEdgeFromPorts(dsl, nodeByID, reg)...)
 	errs = append(errs, checkRefValues(dsl, nodeByID)...)
 	errs = append(errs, checkRequiredInputs(dsl, getType)...)
-	errs = append(errs, checkFallbackOnly(dsl, getType)...)
 	errs = append(errs, checkNoPathToEnd(dsl)...)
 	errs = append(errs, checkIsolatedNode(dsl)...)
 	errs = append(errs, checkMultiInputRequiresJoin(dsl)...)
@@ -461,6 +461,11 @@ func checkSwitchCaseNames(dsl workflow.WorkflowDSL) []ValidationError {
 		}
 		var cfg switchConfig
 		if err := json.Unmarshal(n.Config, &cfg); err != nil {
+			errs = append(errs, ValidationError{
+				NodeID:  n.ID,
+				Code:    CodeSwitchConfigInvalid,
+				Message: fmt.Sprintf("builtin.switch Config invalid: %v", err),
+			})
 			continue
 		}
 		seen := map[string]bool{}

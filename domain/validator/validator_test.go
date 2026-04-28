@@ -127,20 +127,11 @@ func TestValidate_UnknownNodeType(t *testing.T) {
 	mustHaveCode(t, res, CodeUnknownNodeType)
 }
 
-func TestValidate_FallbackOnNodeWithoutDefault(t *testing.T) {
-	types := builtinTypes()
-	types["custom.no_default"] = &nodetype.NodeType{Key: "custom.no_default", Ports: []string{workflow.PortError}}
+func TestValidate_FallbackMissingPort(t *testing.T) {
 	dsl := minimalDSL()
-	dsl.Nodes[1] = workflow.Node{
-		ID: "n_custom", TypeKey: "custom.no_default", TypeVer: nodetype.NodeTypeVersion1,
-		ErrorPolicy: &workflow.ErrorPolicy{OnFinalFail: workflow.FailStrategyFallback},
-	}
-	dsl.Edges = []workflow.Edge{
-		{ID: "e1", From: "n_start", FromPort: workflow.PortDefault, To: "n_custom"},
-		{ID: "e2", From: "n_custom", FromPort: workflow.PortError, To: "n_end"},
-	}
-	res := ValidateForPublish(dsl, &fakeRegistry{types: types})
-	mustHaveCode(t, res, CodeFallbackOnNonDefaultPortNode)
+	dsl.Nodes[1].ErrorPolicy = &workflow.ErrorPolicy{OnFinalFail: workflow.FailStrategyFallback}
+	res := ValidateForPublish(dsl, &fakeRegistry{types: builtinTypes()})
+	mustHaveCode(t, res, CodeFallbackPortInvalid)
 }
 
 func TestValidate_Cycle(t *testing.T) {
@@ -382,6 +373,22 @@ func TestSwitchCaseReservedName(t *testing.T) {
 	}
 }
 
+func TestSwitchConfigInvalid_Reports(t *testing.T) {
+	dsl := workflow.WorkflowDSL{
+		Nodes: []workflow.Node{
+			{ID: "s", TypeKey: nodetype.BuiltinStart},
+			{ID: "sw", TypeKey: nodetype.BuiltinSwitch, Config: json.RawMessage(`{"cases":[`)},
+			{ID: "e", TypeKey: nodetype.BuiltinEnd},
+		},
+		Edges: []workflow.Edge{
+			{ID: "e1", From: "s", FromPort: workflow.PortDefault, To: "sw"},
+			{ID: "e2", From: "sw", FromPort: workflow.PortDefault, To: "e"},
+		},
+	}
+	res := ValidateForPublish(dsl, nodetype.NewBuiltinRegistry())
+	mustHaveCode(t, res, CodeSwitchConfigInvalid)
+}
+
 func TestFallbackPortMissing(t *testing.T) {
 	dsl := fallbackPortDSL("")
 	errs := checkFallbackPort(dsl, nodetype.NewBuiltinRegistry())
@@ -395,6 +402,46 @@ func TestFallbackPortNotInOutputs(t *testing.T) {
 	errs := checkFallbackPort(dsl, nodetype.NewBuiltinRegistry())
 	if !containsCode(errs, CodeFallbackPortInvalid) {
 		t.Fatalf("expected CodeFallbackPortInvalid (phantom), got %v", errs)
+	}
+}
+
+func TestValidateFallbackAllowsIfTruePort(t *testing.T) {
+	dsl := workflow.WorkflowDSL{
+		Nodes: []workflow.Node{
+			{ID: "s", TypeKey: nodetype.BuiltinStart},
+			{ID: "i", TypeKey: nodetype.BuiltinIf, ErrorPolicy: &workflow.ErrorPolicy{
+				OnFinalFail:    workflow.FailStrategyFallback,
+				FallbackOutput: workflow.FallbackOutput{Port: nodetype.PortIfTrue, Output: map[string]any{"result": true}},
+			}},
+			{ID: "e", TypeKey: nodetype.BuiltinEnd},
+		},
+		Edges: []workflow.Edge{
+			{ID: "e1", From: "s", FromPort: workflow.PortDefault, To: "i"},
+			{ID: "e2", From: "i", FromPort: nodetype.PortIfTrue, To: "e"},
+		},
+	}
+	if errs := Validate(dsl, nodetype.NewBuiltinRegistry()); len(errs) != 0 {
+		t.Fatalf("fallback to true port should validate: %v", errs)
+	}
+}
+
+func TestValidateFallbackAllowsSwitchCasePort(t *testing.T) {
+	dsl := workflow.WorkflowDSL{
+		Nodes: []workflow.Node{
+			{ID: "s", TypeKey: nodetype.BuiltinStart},
+			{ID: "sw", TypeKey: nodetype.BuiltinSwitch, Config: json.RawMessage(`{"cases":[{"name":"hot"}]}`), ErrorPolicy: &workflow.ErrorPolicy{
+				OnFinalFail:    workflow.FailStrategyFallback,
+				FallbackOutput: workflow.FallbackOutput{Port: "hot", Output: map[string]any{"matched": "hot"}},
+			}},
+			{ID: "e", TypeKey: nodetype.BuiltinEnd},
+		},
+		Edges: []workflow.Edge{
+			{ID: "e1", From: "s", FromPort: workflow.PortDefault, To: "sw"},
+			{ID: "e2", From: "sw", FromPort: "hot", To: "e"},
+		},
+	}
+	if errs := Validate(dsl, nodetype.NewBuiltinRegistry()); len(errs) != 0 {
+		t.Fatalf("fallback to switch case port should validate: %v", errs)
 	}
 }
 
@@ -493,7 +540,7 @@ func fallbackPortDSL(port string) workflow.WorkflowDSL {
 		Nodes: []workflow.Node{
 			{ID: "s", TypeKey: nodetype.BuiltinStart},
 			{ID: "n", TypeKey: nodetype.BuiltinHTTPRequest, ErrorPolicy: &workflow.ErrorPolicy{
-				OnFinalFail: workflow.FailStrategyFallback,
+				OnFinalFail:    workflow.FailStrategyFallback,
 				FallbackOutput: workflow.FallbackOutput{Port: port, Output: map[string]any{"k": 1}},
 			}},
 			{ID: "e", TypeKey: nodetype.BuiltinEnd},
