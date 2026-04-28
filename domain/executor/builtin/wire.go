@@ -14,4 +14,5 @@ func Register(reg executor.ExecutorRegistry) {
 	reg.Register(nodetype.BuiltinIf, ifFactory)
 	reg.Register(nodetype.BuiltinSwitch, switchFactory)
 	reg.Register(nodetype.BuiltinHTTPRequest, httpRequestFactory)
+	reg.Register(nodetype.BuiltinLLM, llmFactory)
 }
