@@ -72,7 +72,7 @@ CREATE TABLE workflow_node_runs (
     node_id           TEXT NOT NULL,
     node_type_key     TEXT NOT NULL,
     attempt           INTEGER NOT NULL,
-    status            TEXT NOT NULL CHECK (status IN ('pending','running','success','failed','skipped')),
+    status            TEXT NOT NULL CHECK (status IN ('pending','running','success','failed','skipped','cancelled')),
     started_at        TIMESTAMPTZ,
     ended_at          TIMESTAMPTZ,
     resolved_config   JSONB NOT NULL DEFAULT '{}'::jsonb,

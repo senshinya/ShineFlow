@@ -160,6 +160,36 @@ func TestLookupVarsAndNodes(t *testing.T) {
 	}
 }
 
+func TestSymbolsImmutability(t *testing.T) {
+	s, _ := NewSymbols(json.RawMessage(`{"obj":{"x":1}}`))
+	_ = s.SetVar("v", map[string]any{"x": 1})
+	_ = s.SetNodeOutput("n1", map[string]any{"obj": map[string]any{"x": 1}})
+
+	got, err := s.Lookup("trigger.obj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.(map[string]any)["x"] = float64(999)
+	got, _ = s.Lookup("trigger.obj.x")
+	if got.(float64) != 1 {
+		t.Fatalf("trigger mutation leaked: %v", got)
+	}
+
+	got, _ = s.Lookup("vars.v")
+	got.(map[string]any)["x"] = float64(999)
+	got, _ = s.Lookup("vars.v.x")
+	if got.(float64) != 1 {
+		t.Fatalf("vars mutation leaked: %v", got)
+	}
+
+	got, _ = s.Lookup("nodes.n1.obj")
+	got.(map[string]any)["x"] = float64(999)
+	got, _ = s.Lookup("nodes.n1.obj.x")
+	if got.(float64) != 1 {
+		t.Fatalf("nodes mutation leaked: %v", got)
+	}
+}
+
 func TestLookupErrors(t *testing.T) {
 	s, _ := NewSymbols(json.RawMessage(`{"a":{"b":1}}`))
 	_ = s.SetNodeOutput("n1", map[string]any{"k": 1})

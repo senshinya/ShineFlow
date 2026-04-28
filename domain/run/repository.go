@@ -90,6 +90,7 @@ type WorkflowRunRepository interface {
 	// NodeRun（聚合内子实体）
 	AppendNodeRun(ctx context.Context, runID string, nr *NodeRun) error
 	UpdateNodeRunStatus(ctx context.Context, runID, nodeRunID string, status NodeRunStatus, opts ...NodeRunUpdateOpt) error
+	SaveNodeRunResolved(ctx context.Context, runID, nodeRunID string, resolvedConfig, resolvedInputs json.RawMessage) error
 	SaveNodeRunOutput(ctx context.Context, runID, nodeRunID string, output json.RawMessage, firedPort string) error
 	GetNodeRun(ctx context.Context, runID, nodeRunID string) (*NodeRun, error)
 	ListNodeRuns(ctx context.Context, runID string) ([]*NodeRun, error)
