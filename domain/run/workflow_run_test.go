@@ -2,6 +2,20 @@ package run
 
 import "testing"
 
+func TestRunErrCodesForEngine(t *testing.T) {
+	cases := map[string]string{
+		"no_end_reached":          RunErrCodeNoEndReached,
+		"trigger_invalid":         RunErrCodeTriggerInvalid,
+		"output_not_serializable": RunErrCodeOutputNotSerializable,
+		"persistence_error":       RunErrCodePersistence,
+	}
+	for want, got := range cases {
+		if got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	}
+}
+
 func TestRunStatus_CanTransitionTo(t *testing.T) {
 	cases := []struct {
 		from, to RunStatus

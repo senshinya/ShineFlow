@@ -19,6 +19,12 @@ const (
 	FailStrategyFailRun       FailStrategy = "fail_run"
 )
 
+// FallbackOutput 描述 fallback 策略触发时写出的端口和值。
+type FallbackOutput struct {
+	Port   string         `json:"port,omitempty"`
+	Output map[string]any `json:"output,omitempty"`
+}
+
 // ErrorPolicy 描述节点的超时 / 重试 / 兜底策略。Node.ErrorPolicy 为 nil 时引擎使用默认策略。
 type ErrorPolicy struct {
 	Timeout      time.Duration `json:"timeout,omitempty"`
@@ -27,5 +33,5 @@ type ErrorPolicy struct {
 	RetryDelay   time.Duration `json:"retry_delay,omitempty"`
 
 	OnFinalFail    FailStrategy   `json:"on_final_fail,omitempty"`
-	FallbackOutput map[string]any `json:"fallback_output,omitempty"`
+	FallbackOutput FallbackOutput `json:"fallback_output,omitempty"`
 }

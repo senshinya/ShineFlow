@@ -58,10 +58,14 @@ type RunError struct {
 
 // 常用 RunError.Code。
 const (
-	RunErrCodeNodeExecFailed      = "node_exec_failed"
-	RunErrCodeTimeout             = "timeout"
-	RunErrCodeCancelled           = "cancelled"
-	RunErrCodeVersionNotPublished = "version_not_published"
+	RunErrCodeNodeExecFailed        = "node_exec_failed"
+	RunErrCodeTimeout               = "timeout"
+	RunErrCodeCancelled             = "cancelled"
+	RunErrCodeVersionNotPublished   = "version_not_published"
+	RunErrCodeNoEndReached          = "no_end_reached"
+	RunErrCodeTriggerInvalid        = "trigger_invalid"
+	RunErrCodeOutputNotSerializable = "output_not_serializable"
+	RunErrCodePersistence           = "persistence_error"
 )
 
 // WorkflowRun 是运行时聚合根。
