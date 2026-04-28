@@ -28,10 +28,11 @@ var runAllowedPrev = map[domainrun.RunStatus][]domainrun.RunStatus{
 
 // nodeRunAllowedPrev 同上，针对 NodeRun。
 var nodeRunAllowedPrev = map[domainrun.NodeRunStatus][]domainrun.NodeRunStatus{
-	domainrun.NodeRunStatusRunning: {domainrun.NodeRunStatusPending},
-	domainrun.NodeRunStatusSkipped: {domainrun.NodeRunStatusPending},
-	domainrun.NodeRunStatusSuccess: {domainrun.NodeRunStatusRunning},
-	domainrun.NodeRunStatusFailed:  {domainrun.NodeRunStatusRunning},
+	domainrun.NodeRunStatusRunning:   {domainrun.NodeRunStatusPending},
+	domainrun.NodeRunStatusSkipped:   {domainrun.NodeRunStatusPending},
+	domainrun.NodeRunStatusSuccess:   {domainrun.NodeRunStatusRunning},
+	domainrun.NodeRunStatusFailed:    {domainrun.NodeRunStatusRunning},
+	domainrun.NodeRunStatusCancelled: {domainrun.NodeRunStatusPending, domainrun.NodeRunStatusRunning},
 }
 
 // ---- WorkflowRun ----
@@ -233,6 +234,24 @@ func (r *runRepo) UpdateNodeRunStatus(
 			return domainrun.ErrNodeRunNotFound
 		}
 		return domainrun.ErrIllegalStatusTransition
+	}
+	return nil
+}
+
+func (r *runRepo) SaveNodeRunResolved(
+	ctx context.Context, runID, nodeRunID string, resolvedConfig, resolvedInputs json.RawMessage,
+) error {
+	res := storage.GetDB(ctx).Model(&nodeRunModel{}).
+		Where("run_id = ? AND id = ?", runID, nodeRunID).
+		Updates(map[string]any{
+			"resolved_config": resolvedConfig,
+			"resolved_inputs": resolvedInputs,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domainrun.ErrNodeRunNotFound
 	}
 	return nil
 }

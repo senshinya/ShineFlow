@@ -1033,3 +1033,16 @@ type WorkflowRunRepository interface {
 6. **API Token 模型**：本 spec 假设存在，但没定义；独立 spec 处理。
 7. **前端如何拿 NodeType 列表**：通过一个 `GET /api/v1/node-types` 接口；实现细节在 facade 层 spec。
 8. **并行执行**：v1 支持 DAG 并行分支吗？若是，需要在"执行引擎 spec"里明确调度模型。
+
+## 19. 修订历史
+
+### 2026-04-27 工作流执行引擎 spec 覆盖
+
+`2026-04-27-shineflow-workflow-engine-design.md` 对本 spec 的运行时相关条款作出以下覆盖：
+
+- **多 End**：保留多 End 合法语义，引擎采用 first-end-wins，首个 End 成功后取消同次 Run 的其他在途分支。
+- **可达性**：发布校验改为 DAG 可达性与端口有效性校验，移除单 End 强约束，允许显式 fire-and-forget 旁支。
+- **loop**：`builtin.loop` 保留 key 常量，当前 builtin catalog 暂不注册，循环语义交给后续独立 spec。
+- **merge → join**：汇合节点统一命名为 `builtin.join`，支持 `JoinModeAny` 与 `JoinModeAll`。
+- **RefValue**：结构化引用删除 `PortID`，运行时统一通过 `nodes.<nodeID>.<path>` 读取最新可见输出。
+- **FallbackOutput**：从 `map[string]any` 改为结构体 `{Port, Output}`，fallback 可声明要触发的输出端口。
