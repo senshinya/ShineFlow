@@ -64,26 +64,35 @@ func (s *Symbols) SetVar(key string, value any) error {
 	return nil
 }
 
-// SnapshotVars 返回 vars map 的新表头，调用方可修改返回 map。
+// SnapshotVars 返回 vars map 的副本，调用方可修改返回 map 和 RawMessage 字节。
 func (s *Symbols) SnapshotVars() map[string]json.RawMessage {
 	out := make(map[string]json.RawMessage, len(s.vars))
 	for k, v := range s.vars {
-		out[k] = v
+		out[k] = cloneRawMessage(v)
 	}
 	return out
 }
 
-// Snapshot 克隆 map 表头并共享 RawMessage 值，用于获得调度时刻视图。
+// Snapshot 克隆 map 表头和 RawMessage 字节，用于获得调度时刻视图。
 func (s *Symbols) Snapshot() *Symbols {
 	vars := make(map[string]json.RawMessage, len(s.vars))
 	for k, v := range s.vars {
-		vars[k] = v
+		vars[k] = cloneRawMessage(v)
 	}
 	nodes := make(map[string]json.RawMessage, len(s.nodes))
 	for k, v := range s.nodes {
-		nodes[k] = v
+		nodes[k] = cloneRawMessage(v)
 	}
-	return &Symbols{trigger: s.trigger, vars: vars, nodes: nodes}
+	return &Symbols{trigger: cloneRawMessage(s.trigger), vars: vars, nodes: nodes}
+}
+
+func cloneRawMessage(v json.RawMessage) json.RawMessage {
+	if v == nil {
+		return nil
+	}
+	out := make(json.RawMessage, len(v))
+	copy(out, v)
+	return out
 }
 
 // Lookup 解析点分路径；每次读取都会反序列化子树，调用方可安全修改返回对象。

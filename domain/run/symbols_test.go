@@ -95,6 +95,16 @@ func TestSetVarAndSnapshotVars(t *testing.T) {
 	}
 }
 
+func TestSnapshotVarsRawMessageBytesIsolated(t *testing.T) {
+	s, _ := NewSymbols(nil)
+	_ = s.SetVar("x", 42)
+	snap := s.SnapshotVars()
+	snap["x"][0] = '9'
+	if string(s.SnapshotVars()["x"]) != `42` {
+		t.Fatalf("snapshot bytes leaked into original: %s", s.SnapshotVars()["x"])
+	}
+}
+
 func TestSnapshotMapHeaderForked(t *testing.T) {
 	s, _ := NewSymbols(nil)
 	_ = s.SetVar("v", 1)
@@ -103,6 +113,16 @@ func TestSnapshotMapHeaderForked(t *testing.T) {
 
 	if string(snap.SnapshotVars()["v"]) != `1` {
 		t.Fatalf("snap vars.v: %s", snap.SnapshotVars()["v"])
+	}
+}
+
+func TestSnapshotRawMessageBytesIsolated(t *testing.T) {
+	s, _ := NewSymbols(nil)
+	_ = s.SetVar("v", 42)
+	snap := s.Snapshot()
+	snap.vars["v"][0] = '9'
+	if string(s.vars["v"]) != `42` {
+		t.Fatalf("snapshot bytes leaked into original: %s", s.vars["v"])
 	}
 }
 

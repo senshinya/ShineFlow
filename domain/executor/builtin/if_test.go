@@ -41,6 +41,38 @@ func TestIfNeStrings(t *testing.T) {
 	}
 }
 
+func TestIfEqLargeIntegersStayExact(t *testing.T) {
+	out, err := ifExec().Execute(context.Background(), executor.ExecInput{
+		Config: json.RawMessage(`{"operator":"eq"}`),
+		Inputs: map[string]any{
+			"left":  int64(9007199254740992),
+			"right": int64(9007199254740993),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.FiredPort != nodetype.PortIfFalse {
+		t.Fatalf("large integers differ and should fire false, got %s", out.FiredPort)
+	}
+}
+
+func TestIfNeLargeIntegersStayExact(t *testing.T) {
+	out, err := ifExec().Execute(context.Background(), executor.ExecInput{
+		Config: json.RawMessage(`{"operator":"ne"}`),
+		Inputs: map[string]any{
+			"left":  int64(9007199254740992),
+			"right": int64(9007199254740993),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.FiredPort != nodetype.PortIfTrue {
+		t.Fatalf("large integers differ and should fire true, got %s", out.FiredPort)
+	}
+}
+
 func TestIfNumericComparisons(t *testing.T) {
 	cases := []struct {
 		op    string

@@ -81,6 +81,11 @@ func evalCondition(op string, left, right any) (bool, error) {
 }
 
 func compareEqual(left, right any) bool {
+	if li, lok := exactInteger(left); lok {
+		if ri, rok := exactInteger(right); rok {
+			return li.equal(ri)
+		}
+	}
 	if lf, lok := coerceFloat64(left); lok {
 		if rf, rok := coerceFloat64(right); rok {
 			return lf == rf
