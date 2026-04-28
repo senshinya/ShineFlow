@@ -70,3 +70,16 @@ func (s *Symbols) SnapshotVars() map[string]json.RawMessage {
 	}
 	return out
 }
+
+// Snapshot 克隆 map 表头并共享 RawMessage 值，用于获得调度时刻视图。
+func (s *Symbols) Snapshot() *Symbols {
+	vars := make(map[string]json.RawMessage, len(s.vars))
+	for k, v := range s.vars {
+		vars[k] = v
+	}
+	nodes := make(map[string]json.RawMessage, len(s.nodes))
+	for k, v := range s.nodes {
+		nodes[k] = v
+	}
+	return &Symbols{trigger: s.trigger, vars: vars, nodes: nodes}
+}

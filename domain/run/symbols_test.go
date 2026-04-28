@@ -94,3 +94,14 @@ func TestSetVarAndSnapshotVars(t *testing.T) {
 		t.Fatal("snapshot leak: original mutated")
 	}
 }
+
+func TestSnapshotMapHeaderForked(t *testing.T) {
+	s, _ := NewSymbols(nil)
+	_ = s.SetVar("v", 1)
+	snap := s.Snapshot()
+	_ = s.SetVar("v", 999)
+
+	if string(snap.SnapshotVars()["v"]) != `1` {
+		t.Fatalf("snap vars.v: %s", snap.SnapshotVars()["v"])
+	}
+}
