@@ -7,10 +7,17 @@ const (
 	BuiltinLLM          = "builtin.llm"
 	BuiltinIf           = "builtin.if"
 	BuiltinSwitch       = "builtin.switch"
+	BuiltinJoin         = "builtin.join"
 	BuiltinLoop         = "builtin.loop"
 	BuiltinCode         = "builtin.code"
 	BuiltinSetVariable  = "builtin.set_variable"
 	BuiltinHTTPRequest  = "builtin.http_request"
+)
+
+// Join 节点支持的汇合模式。
+const (
+	JoinModeAny = "any"
+	JoinModeAll = "all"
 )
 
 // 插件 NodeType Key 的前缀；用于 Registry 投影 / 失效检索。
