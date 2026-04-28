@@ -203,11 +203,11 @@ func checkEdgeFromPorts(
 	return out
 }
 
-// 规则 3b：RefValue.NodeID / PortID 必须真实存在。
+// 规则 3b：RefValue.NodeID 必须指向 DSL 内真实节点。
 func checkRefValues(
 	dsl workflow.WorkflowDSL,
 	nodeByID map[string]*workflow.Node,
-	getType func(string) (*nodetype.NodeType, bool),
+	_ func(string) (*nodetype.NodeType, bool),
 ) []ValidationError {
 	var out []ValidationError
 	for ni, n := range dsl.Nodes {
@@ -219,30 +219,10 @@ func checkRefValues(
 			if !ok {
 				continue
 			}
-			target, ok := nodeByID[ref.NodeID]
-			if !ok {
+			if _, ok := nodeByID[ref.NodeID]; !ok {
 				out = append(out, ValidationError{
 					Code:    CodeDanglingRef,
 					Message: fmt.Sprintf("node %q input %q references non-existent node %q", n.ID, portKey, ref.NodeID),
-					Path:    fmt.Sprintf("nodes[%d].inputs.%s", ni, portKey),
-				})
-				continue
-			}
-			nt, ok := getType(target.TypeKey)
-			if !ok {
-				continue
-			}
-			portFound := false
-			for _, p := range nt.OutputSchema {
-				if p.ID == ref.PortID {
-					portFound = true
-					break
-				}
-			}
-			if !portFound {
-				out = append(out, ValidationError{
-					Code:    CodeDanglingRef,
-					Message: fmt.Sprintf("node %q input %q references unknown port %q on node %q", n.ID, portKey, ref.PortID, ref.NodeID),
 					Path:    fmt.Sprintf("nodes[%d].inputs.%s", ni, portKey),
 				})
 			}

@@ -25,14 +25,12 @@ type ValueSource struct {
 	Value any       `json:"value"`
 }
 
-// RefValue 引用上游某个节点输出端口的值（可选深路径）。
-//   - NodeID  指向 DSL 内某个 Node.ID
-//   - PortID  指向该节点 OutputSchema 中某个 PortSpec.ID
-//   - Path    在 object 类型 Output 上的深路径，如 "data.voice_url"；可为空
-//   - Name    冗余的端口显示名，仅给前端读，不参与运行时解析
+// RefValue 引用上游某个节点输出中的值（可选深路径）。
+//   - NodeID 指向 DSL 内某个 Node.ID
+//   - Path   在 object 类型 Output 上的深路径，如 "data.voice_url"；可为空
+//   - Name   冗余的显示名，仅给前端读，不参与运行时解析
 type RefValue struct {
 	NodeID string `json:"node_id"`
-	PortID string `json:"port_id"`
 	Path   string `json:"path,omitempty"`
 	Name   string `json:"name,omitempty"`
 }

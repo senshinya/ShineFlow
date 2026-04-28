@@ -103,7 +103,7 @@ func TestValidate_DanglingRef(t *testing.T) {
 	dsl.Nodes[1].Inputs = map[string]workflow.ValueSource{
 		"in_prompt": {
 			Kind:  workflow.ValueKindRef,
-			Value: workflow.RefValue{NodeID: "n_ghost", PortID: "out_1"},
+			Value: workflow.RefValue{NodeID: "n_ghost"},
 		},
 	}
 	res := ValidateForPublish(dsl, &fakeRegistry{types: builtinTypes()})
