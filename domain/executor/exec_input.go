@@ -62,6 +62,35 @@ type HTTPResponse struct {
 	Body       []byte
 }
 
+// LLMClient 是与传输协议无关的 LLM completion 端口；具体适配器由 infrastructure 层提供。
+type LLMClient interface {
+	Complete(ctx context.Context, req LLMRequest) (LLMResponse, error)
+}
+
+type LLMRequest struct {
+	Provider    string
+	Model       string
+	Messages    []LLMMessage
+	Temperature float64
+	MaxTokens   int
+}
+
+type LLMMessage struct {
+	Role    string
+	Content string
+}
+
+type LLMResponse struct {
+	Text  string
+	Model string
+	Usage LLMUsage
+}
+
+type LLMUsage struct {
+	InputTokens  int
+	OutputTokens int
+}
+
 // ExecServices 是 Executor 可访问的能力集合。新增 LLM client / MCP client pool 时往这里加字段。
 //
 // 安全约束：Credentials 是唯一获取明文凭证的入口（spec §11.4）。
@@ -69,6 +98,7 @@ type ExecServices struct {
 	Credentials credential.CredentialResolver
 	Logger      Logger
 	HTTPClient  HTTPClient
+	LLMClient   LLMClient
 }
 
 // ExecInput 是引擎传给 NodeExecutor 的入参快照。
