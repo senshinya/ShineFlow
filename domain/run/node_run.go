@@ -9,17 +9,18 @@ import (
 type NodeRunStatus string
 
 const (
-	NodeRunStatusPending NodeRunStatus = "pending"
-	NodeRunStatusRunning NodeRunStatus = "running"
-	NodeRunStatusSuccess NodeRunStatus = "success"
-	NodeRunStatusFailed  NodeRunStatus = "failed"
-	NodeRunStatusSkipped NodeRunStatus = "skipped"
+	NodeRunStatusPending   NodeRunStatus = "pending"
+	NodeRunStatusRunning   NodeRunStatus = "running"
+	NodeRunStatusSuccess   NodeRunStatus = "success"
+	NodeRunStatusFailed    NodeRunStatus = "failed"
+	NodeRunStatusSkipped   NodeRunStatus = "skipped"
+	NodeRunStatusCancelled NodeRunStatus = "cancelled"
 )
 
 // IsTerminal 是否为终态。
 func (s NodeRunStatus) IsTerminal() bool {
 	switch s {
-	case NodeRunStatusSuccess, NodeRunStatusFailed, NodeRunStatusSkipped:
+	case NodeRunStatusSuccess, NodeRunStatusFailed, NodeRunStatusSkipped, NodeRunStatusCancelled:
 		return true
 	}
 	return false
@@ -35,10 +36,10 @@ func (s NodeRunStatus) CanTransitionTo(next NodeRunStatus) bool {
 	}
 	switch s {
 	case NodeRunStatusPending:
-		// 允许 pending → running，或被裁剪直接 → skipped
-		return next == NodeRunStatusRunning || next == NodeRunStatusSkipped
+		// 允许 pending → running，或被裁剪直接 → skipped/cancelled
+		return next == NodeRunStatusRunning || next == NodeRunStatusSkipped || next == NodeRunStatusCancelled
 	case NodeRunStatusRunning:
-		return next == NodeRunStatusSuccess || next == NodeRunStatusFailed
+		return next == NodeRunStatusSuccess || next == NodeRunStatusFailed || next == NodeRunStatusCancelled
 	}
 	return false
 }

@@ -11,11 +11,14 @@ func TestNodeRunStatus_CanTransitionTo(t *testing.T) {
 		{NodeRunStatusPending, NodeRunStatusSkipped, true},
 		{NodeRunStatusRunning, NodeRunStatusSuccess, true},
 		{NodeRunStatusRunning, NodeRunStatusFailed, true},
+		{NodeRunStatusPending, NodeRunStatusCancelled, true},
+		{NodeRunStatusRunning, NodeRunStatusCancelled, true},
 
 		// 终态不可回退
 		{NodeRunStatusSuccess, NodeRunStatusRunning, false},
 		{NodeRunStatusFailed, NodeRunStatusRunning, false},
 		{NodeRunStatusSkipped, NodeRunStatusRunning, false},
+		{NodeRunStatusCancelled, NodeRunStatusRunning, false},
 
 		// 同态不可自转
 		{NodeRunStatusRunning, NodeRunStatusRunning, false},
