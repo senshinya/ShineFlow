@@ -24,3 +24,5 @@ go.work.sum
 # Env & local config
 .env
 .env.local
+
+.worktrees/
