@@ -2,8 +2,16 @@ package executor
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
+
+func TestRunInfoHasTriggerPayload(t *testing.T) {
+	ri := RunInfo{TriggerPayload: json.RawMessage(`{"event":"created"}`)}
+	if string(ri.TriggerPayload) != `{"event":"created"}` {
+		t.Fatalf("trigger payload: %s", ri.TriggerPayload)
+	}
+}
 
 func TestExecServicesHasLLMClient(t *testing.T) {
 	var s ExecServices

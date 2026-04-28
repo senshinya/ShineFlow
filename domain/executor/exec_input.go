@@ -27,13 +27,14 @@ import (
 
 // RunInfo 是 Executor 在执行时可读的 Run 元信息（只读快照）。
 type RunInfo struct {
-	RunID        string
-	NodeRunID    string
-	Attempt      int
-	DefinitionID string
-	VersionID    string
-	TriggerKind  run.TriggerKind
-	TriggerRef   string
+	RunID          string
+	NodeRunID      string
+	Attempt        int
+	DefinitionID   string
+	VersionID      string
+	TriggerKind    run.TriggerKind
+	TriggerRef     string
+	TriggerPayload json.RawMessage
 }
 
 // Logger 是 Executor 可用的极简日志接口；具体实现由 infra 注入。
