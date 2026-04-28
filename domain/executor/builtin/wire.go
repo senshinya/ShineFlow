@@ -11,4 +11,5 @@ func Register(reg executor.ExecutorRegistry) {
 	reg.Register(nodetype.BuiltinEnd, endFactory)
 	reg.Register(nodetype.BuiltinSetVariable, setVariableFactory)
 	reg.Register(nodetype.BuiltinJoin, joinFactory)
+	reg.Register(nodetype.BuiltinIf, ifFactory)
 }
