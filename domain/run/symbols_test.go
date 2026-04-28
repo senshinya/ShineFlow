@@ -105,3 +105,96 @@ func TestSnapshotMapHeaderForked(t *testing.T) {
 		t.Fatalf("snap vars.v: %s", snap.SnapshotVars()["v"])
 	}
 }
+
+func TestLookupTrigger(t *testing.T) {
+	s, _ := NewSymbols(json.RawMessage(`{"user_id":"u1","count":42}`))
+	got, err := s.Lookup("trigger.user_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "u1" {
+		t.Fatalf("got %v", got)
+	}
+	got, _ = s.Lookup("trigger.count")
+	if v, _ := got.(float64); v != 42 {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestLookupVarsAndNodes(t *testing.T) {
+	s, _ := NewSymbols(nil)
+	_ = s.SetVar("x", 7)
+	_ = s.SetNodeOutput("n1", map[string]any{"items": []any{"a", "b"}})
+
+	got, _ := s.Lookup("vars.x")
+	if v, _ := got.(float64); v != 7 {
+		t.Fatalf("vars.x: %v", got)
+	}
+
+	got, err := s.Lookup("nodes.n1.items.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "b" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestLookupErrors(t *testing.T) {
+	s, _ := NewSymbols(json.RawMessage(`{"a":{"b":1}}`))
+	_ = s.SetNodeOutput("n1", map[string]any{"k": 1})
+
+	cases := []struct {
+		path, contains string
+	}{
+		{"", "empty path"},
+		{"unknown.x", "unknown root"},
+		{"nodes", "nodes.<id> required"},
+		{"nodes.missing.x", "node not yet produced output"},
+		{"vars.missing", "var not set"},
+		{"vars", "vars.<key> required"},
+		{"trigger.a.b.c", "cannot navigate"},
+		{"nodes.n1.k.0", "cannot navigate"},
+	}
+	for _, c := range cases {
+		t.Run(c.path, func(t *testing.T) {
+			_, err := s.Lookup(c.path)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), c.contains) {
+				t.Fatalf("got %v, want contains %q", err, c.contains)
+			}
+		})
+	}
+}
+
+func TestSnapshotIsolatedFromOriginal(t *testing.T) {
+	s, _ := NewSymbols(json.RawMessage(`{"a":1}`))
+	_ = s.SetVar("v", 1)
+	_ = s.SetNodeOutput("n1", map[string]any{"k": 1})
+
+	snap := s.Snapshot()
+
+	_ = s.SetVar("v", 999)
+	_ = s.SetNodeOutput("n1", map[string]any{"k": 999})
+	_ = s.SetNodeOutput("n2", map[string]any{"new": true})
+
+	got, err := snap.Lookup("vars.v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := got.(float64); v != 1 {
+		t.Fatalf("snap vars.v: %v", got)
+	}
+	got, err = snap.Lookup("nodes.n1.k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := got.(float64); v != 1 {
+		t.Fatalf("snap nodes.n1.k: %v", got)
+	}
+	if _, err := snap.Lookup("nodes.n2.new"); err == nil {
+		t.Fatal("snap should not see n2 added after Snapshot()")
+	}
+}

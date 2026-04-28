@@ -3,6 +3,8 @@ package run
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // Symbols 是单次运行的变量命名空间，供模板和引用解析使用。
@@ -82,4 +84,70 @@ func (s *Symbols) Snapshot() *Symbols {
 		nodes[k] = v
 	}
 	return &Symbols{trigger: s.trigger, vars: vars, nodes: nodes}
+}
+
+// Lookup 解析点分路径；每次读取都会反序列化子树，调用方可安全修改返回对象。
+func (s *Symbols) Lookup(path string) (any, error) {
+	if path == "" {
+		return nil, fmt.Errorf("empty path")
+	}
+	parts := strings.Split(path, ".")
+	if parts[0] == "" {
+		return nil, fmt.Errorf("empty path")
+	}
+
+	var raw json.RawMessage
+	var rest []string
+	switch parts[0] {
+	case "trigger":
+		raw, rest = s.trigger, parts[1:]
+	case "vars":
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("vars.<key> required")
+		}
+		v, ok := s.vars[parts[1]]
+		if !ok {
+			return nil, fmt.Errorf("var not set: %s", parts[1])
+		}
+		raw, rest = v, parts[2:]
+	case "nodes":
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("nodes.<id> required")
+		}
+		n, ok := s.nodes[parts[1]]
+		if !ok {
+			return nil, fmt.Errorf("node not yet produced output: %s", parts[1])
+		}
+		raw, rest = n, parts[2:]
+	default:
+		return nil, fmt.Errorf("unknown root: %q", parts[0])
+	}
+
+	var cur any
+	if err := json.Unmarshal(raw, &cur); err != nil {
+		return nil, fmt.Errorf("symbols decode at %q: %w", parts[0], err)
+	}
+	return walkPath(cur, rest)
+}
+
+func walkPath(cur any, parts []string) (any, error) {
+	for _, p := range parts {
+		switch x := cur.(type) {
+		case map[string]any:
+			v, ok := x[p]
+			if !ok {
+				return nil, fmt.Errorf("key not found: %s", p)
+			}
+			cur = v
+		case []any:
+			idx, err := strconv.Atoi(p)
+			if err != nil || idx < 0 || idx >= len(x) {
+				return nil, fmt.Errorf("invalid array index: %s", p)
+			}
+			cur = x[idx]
+		default:
+			return nil, fmt.Errorf("cannot navigate %T at %q", cur, p)
+		}
+	}
+	return cur, nil
 }
