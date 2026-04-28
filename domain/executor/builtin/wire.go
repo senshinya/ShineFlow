@@ -9,4 +9,5 @@ import (
 func Register(reg executor.ExecutorRegistry) {
 	reg.Register(nodetype.BuiltinStart, startFactory)
 	reg.Register(nodetype.BuiltinEnd, endFactory)
+	reg.Register(nodetype.BuiltinSetVariable, setVariableFactory)
 }
