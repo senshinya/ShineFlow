@@ -238,7 +238,7 @@ func TestFromPersistedState(t *testing.T) {
 	}
 }
 
-func TestFromPersistedStateLaterVisibleRowWins(t *testing.T) {
+func TestFromPersistedStateLaterVisibleAttemptWins(t *testing.T) {
 	rn := &WorkflowRun{TriggerPayload: json.RawMessage(`{}`)}
 	nodeRuns := []*NodeRun{
 		{NodeID: "n1", Attempt: 1, Status: NodeRunStatusSuccess, Output: json.RawMessage(`{"text":"v1"}`)},
@@ -258,6 +258,23 @@ func TestFromPersistedStateLaterVisibleRowWins(t *testing.T) {
 	got, _ = s.Lookup("nodes.n2.text")
 	if got != "visible" {
 		t.Fatalf("n2.text = %v, want visible", got)
+	}
+}
+
+func TestFromPersistedStateLaterVisibleAttemptWinsWhenRowsUnordered(t *testing.T) {
+	rn := &WorkflowRun{TriggerPayload: json.RawMessage(`{}`)}
+	nodeRuns := []*NodeRun{
+		{NodeID: "n1", Attempt: 2, Status: NodeRunStatusSuccess, Output: json.RawMessage(`{"text":"v2"}`)},
+		{NodeID: "n1", Attempt: 1, Status: NodeRunStatusSuccess, Output: json.RawMessage(`{"text":"v1"}`)},
+	}
+
+	s, err := FromPersistedState(rn, nodeRuns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Lookup("nodes.n1.text")
+	if got != "v2" {
+		t.Fatalf("n1.text = %v, want v2", got)
 	}
 }
 

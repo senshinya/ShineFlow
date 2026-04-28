@@ -31,12 +31,15 @@ func newInMemoryRegistry() *inMemoryRegistry {
 }
 
 func (r *inMemoryRegistry) put(nt *NodeType) {
-	r.byKey[nt.Key] = nt
+	r.byKey[nt.Key] = cloneNodeType(nt)
 }
 
 func (r *inMemoryRegistry) Get(key string) (*NodeType, bool) {
 	nt, ok := r.byKey[key]
-	return nt, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneNodeType(nt), true
 }
 
 func (r *inMemoryRegistry) List(filter NodeTypeFilter) []*NodeType {
@@ -51,7 +54,7 @@ func (r *inMemoryRegistry) List(filter NodeTypeFilter) []*NodeType {
 		if len(filter.KeyPrefixes) > 0 && !hasAnyPrefix(nt.Key, filter.KeyPrefixes) {
 			continue
 		}
-		out = append(out, nt)
+		out = append(out, cloneNodeType(nt))
 	}
 	return out
 }
@@ -75,4 +78,16 @@ func hasAnyPrefix(key string, prefixes []string) bool {
 		}
 	}
 	return false
+}
+
+func cloneNodeType(nt *NodeType) *NodeType {
+	if nt == nil {
+		return nil
+	}
+	clone := *nt
+	clone.ConfigSchema = append(nt.ConfigSchema[:0:0], nt.ConfigSchema...)
+	clone.InputSchema = append(nt.InputSchema[:0:0], nt.InputSchema...)
+	clone.OutputSchema = append(nt.OutputSchema[:0:0], nt.OutputSchema...)
+	clone.Ports = append(nt.Ports[:0:0], nt.Ports...)
+	return &clone
 }

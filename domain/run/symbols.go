@@ -167,6 +167,11 @@ func FromPersistedState(rn *WorkflowRun, nodeRuns []*NodeRun) (*Symbols, error) 
 			s.vars = varsRaw
 		}
 	}
+	type pick struct {
+		attempt int
+		out     json.RawMessage
+	}
+	latestVisible := map[string]pick{}
 	for _, nr := range nodeRuns {
 		visible := nr.Status == NodeRunStatusSuccess || nr.FallbackApplied
 		if !visible {
@@ -176,7 +181,13 @@ func FromPersistedState(rn *WorkflowRun, nodeRuns []*NodeRun) (*Symbols, error) 
 		if len(out) == 0 {
 			out = json.RawMessage(`{}`)
 		}
-		s.nodes[nr.NodeID] = out
+		cur, ok := latestVisible[nr.NodeID]
+		if !ok || nr.Attempt >= cur.attempt {
+			latestVisible[nr.NodeID] = pick{attempt: nr.Attempt, out: out}
+		}
+	}
+	for nodeID, p := range latestVisible {
+		s.nodes[nodeID] = p.out
 	}
 	return s, nil
 }
