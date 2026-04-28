@@ -31,6 +31,12 @@ func (switchExecutor) Execute(_ context.Context, in executor.ExecInput) (executo
 	}
 	value := in.Inputs["value"]
 	for _, c := range cfg.Cases {
+		if c.Name == "" {
+			return executor.ExecOutput{}, fmt.Errorf("switch: case name is required")
+		}
+		if c.Right.Kind != workflow.ValueKindLiteral {
+			return executor.ExecOutput{}, fmt.Errorf("switch case %q: right.kind must be literal", c.Name)
+		}
 		right := c.Right.Value
 		ok, err := evalCondition(c.Operator, value, right)
 		if err != nil {

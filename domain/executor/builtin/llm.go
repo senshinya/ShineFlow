@@ -71,18 +71,30 @@ func buildMessages(systemPrompt string, inputs map[string]any) ([]executor.LLMMe
 		if !ok {
 			return nil, fmt.Errorf("llm: input.messages must be array, got %T", raw)
 		}
+		if len(arr) == 0 {
+			return nil, fmt.Errorf("llm: input.messages must contain at least one message")
+		}
 		for i, item := range arr {
 			m, ok := item.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("llm: input.messages[%d] must be object", i)
 			}
-			role, _ := m["role"].(string)
-			content, _ := m["content"].(string)
+			role, ok := m["role"].(string)
+			if !ok || role == "" {
+				return nil, fmt.Errorf("llm: input.messages[%d].role is required", i)
+			}
+			content, ok := m["content"].(string)
+			if !ok || content == "" {
+				return nil, fmt.Errorf("llm: input.messages[%d].content is required", i)
+			}
 			msgs = append(msgs, executor.LLMMessage{Role: role, Content: content})
 		}
 		return msgs, nil
 	}
 	if prompt, ok := inputs["prompt"].(string); ok {
+		if prompt == "" {
+			return nil, fmt.Errorf("llm: input.prompt is required")
+		}
 		msgs = append(msgs, executor.LLMMessage{Role: "user", Content: prompt})
 		return msgs, nil
 	}

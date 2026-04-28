@@ -29,6 +29,12 @@ func (httpRequestExecutor) Execute(ctx context.Context, in executor.ExecInput) (
 	if err := json.Unmarshal(in.Config, &cfg); err != nil {
 		return executor.ExecOutput{}, fmt.Errorf("http_request: parse config: %w", err)
 	}
+	if cfg.Method == "" {
+		return executor.ExecOutput{}, fmt.Errorf("http_request: config.method is required")
+	}
+	if cfg.URL == "" {
+		return executor.ExecOutput{}, fmt.Errorf("http_request: config.url is required")
+	}
 	resp, err := in.Services.HTTPClient.Do(ctx, executor.HTTPRequest{
 		Method:  cfg.Method,
 		URL:     cfg.URL,

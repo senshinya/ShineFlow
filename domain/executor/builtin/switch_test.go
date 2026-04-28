@@ -66,3 +66,25 @@ func TestSwitchOrderingFirstWins(t *testing.T) {
 		t.Fatalf("port: %s (first matching case wins)", out.FiredPort)
 	}
 }
+
+func TestSwitchRejectsEmptyCaseName(t *testing.T) {
+	cfg := `{"cases":[{"name":"","operator":"is_empty","right":{"kind":"literal","value":null}}]}`
+	_, err := switchExec().Execute(context.Background(), executor.ExecInput{
+		Config: json.RawMessage(cfg),
+		Inputs: map[string]any{"value": ""},
+	})
+	if err == nil {
+		t.Fatal("expected empty case name error")
+	}
+}
+
+func TestSwitchRejectsNonLiteralRight(t *testing.T) {
+	cfg := `{"cases":[{"name":"x","operator":"eq","right":{"kind":"ref","value":{"node_id":"n1","path":"k"}}}]}`
+	_, err := switchExec().Execute(context.Background(), executor.ExecInput{
+		Config: json.RawMessage(cfg),
+		Inputs: map[string]any{"value": "x"},
+	})
+	if err == nil {
+		t.Fatal("expected non-literal right error")
+	}
+}

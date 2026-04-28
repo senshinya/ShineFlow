@@ -51,7 +51,7 @@ func TestLLMTransportErrPropagates(t *testing.T) {
 	wantErr := errors.New("network down")
 	_, err := exe.Execute(context.Background(), executor.ExecInput{
 		Config:   json.RawMessage(`{"provider":"openai","model":"gpt-4"}`),
-		Inputs:   map[string]any{"messages": []any{}},
+		Inputs:   map[string]any{"messages": []any{map[string]any{"role": "user", "content": "hi"}}},
 		Services: executor.ExecServices{LLMClient: &fakeLLMResp{err: wantErr}},
 	})
 	if !errors.Is(err, wantErr) {
@@ -87,5 +87,29 @@ func TestLLMPromptOnly(t *testing.T) {
 	}
 	if len(client.req.Messages) != 2 || client.req.Messages[0].Role != "system" || client.req.Messages[1].Content != "Translate" {
 		t.Fatalf("messages: %+v", client.req.Messages)
+	}
+}
+
+func TestLLMRejectsEmptyMessages(t *testing.T) {
+	exe := llmFactory(nil)
+	_, err := exe.Execute(context.Background(), executor.ExecInput{
+		Config:   json.RawMessage(`{"provider":"openai","model":"gpt-4"}`),
+		Inputs:   map[string]any{"messages": []any{}},
+		Services: executor.ExecServices{LLMClient: &fakeLLMResp{}},
+	})
+	if err == nil {
+		t.Fatal("expected empty messages error")
+	}
+}
+
+func TestLLMRejectsMalformedMessage(t *testing.T) {
+	exe := llmFactory(nil)
+	_, err := exe.Execute(context.Background(), executor.ExecInput{
+		Config:   json.RawMessage(`{"provider":"openai","model":"gpt-4"}`),
+		Inputs:   map[string]any{"messages": []any{map[string]any{"role": "user"}}},
+		Services: executor.ExecServices{LLMClient: &fakeLLMResp{}},
+	})
+	if err == nil {
+		t.Fatal("expected malformed message error")
 	}
 }

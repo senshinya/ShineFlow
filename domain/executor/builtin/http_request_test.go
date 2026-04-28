@@ -83,3 +83,14 @@ func TestHTTPClientNotConfigured(t *testing.T) {
 		t.Fatalf("expected ErrPortNotConfigured, got %v", err)
 	}
 }
+
+func TestHTTPRequiresMethodAndURL(t *testing.T) {
+	exe := httpRequestFactory(nil)
+	_, err := exe.Execute(context.Background(), executor.ExecInput{
+		Config:   json.RawMessage(`{"method":"","url":""}`),
+		Services: executor.ExecServices{HTTPClient: &fakeHTTP{}},
+	})
+	if err == nil {
+		t.Fatal("expected required config error")
+	}
+}
