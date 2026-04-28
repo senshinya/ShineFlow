@@ -198,3 +198,42 @@ func TestSnapshotIsolatedFromOriginal(t *testing.T) {
 		t.Fatal("snap should not see n2 added after Snapshot()")
 	}
 }
+
+func TestFromPersistedState(t *testing.T) {
+	rn := &WorkflowRun{
+		TriggerPayload: json.RawMessage(`{"u":"u1"}`),
+		Vars:           json.RawMessage(`{"v":42}`),
+	}
+	nrSuccess := &NodeRun{NodeID: "n1", Status: NodeRunStatusSuccess, Output: json.RawMessage(`{"out":1}`)}
+	nrFallback := &NodeRun{NodeID: "n2", Status: NodeRunStatusFailed, FallbackApplied: true, Output: json.RawMessage(`{"fb":2}`)}
+	nrFailed := &NodeRun{NodeID: "n3", Status: NodeRunStatusFailed, Output: json.RawMessage(`{"x":9}`)}
+	nrSkipped := &NodeRun{NodeID: "n4", Status: NodeRunStatusSkipped}
+
+	s, err := FromPersistedState(rn, []*NodeRun{nrSuccess, nrFallback, nrFailed, nrSkipped})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.Lookup("trigger.u")
+	if got != "u1" {
+		t.Fatalf("trigger.u: %v", got)
+	}
+	got, _ = s.Lookup("vars.v")
+	if v, _ := got.(float64); v != 42 {
+		t.Fatalf("vars.v: %v", got)
+	}
+	got, _ = s.Lookup("nodes.n1.out")
+	if v, _ := got.(float64); v != 1 {
+		t.Fatalf("nodes.n1.out: %v", got)
+	}
+	got, _ = s.Lookup("nodes.n2.fb")
+	if v, _ := got.(float64); v != 2 {
+		t.Fatalf("nodes.n2 fallback should be visible: %v", got)
+	}
+	if _, err := s.Lookup("nodes.n3.x"); err == nil {
+		t.Fatal("plain failed node must not be visible")
+	}
+	if _, err := s.Lookup("nodes.n4.anything"); err == nil {
+		t.Fatal("skipped node must not be visible")
+	}
+}

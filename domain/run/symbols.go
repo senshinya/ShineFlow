@@ -151,3 +151,32 @@ func walkPath(cur any, parts []string) (any, error) {
 	}
 	return cur, nil
 }
+
+// FromPersistedState 从 Run 行和 NodeRun 行重建 Symbols，供审计和回放路径使用。
+func FromPersistedState(rn *WorkflowRun, nodeRuns []*NodeRun) (*Symbols, error) {
+	s, err := NewSymbols(rn.TriggerPayload)
+	if err != nil {
+		return nil, err
+	}
+	if len(rn.Vars) > 0 {
+		var varsRaw map[string]json.RawMessage
+		if err := json.Unmarshal(rn.Vars, &varsRaw); err != nil {
+			return nil, fmt.Errorf("decode persisted vars: %w", err)
+		}
+		if varsRaw != nil {
+			s.vars = varsRaw
+		}
+	}
+	for _, nr := range nodeRuns {
+		visible := nr.Status == NodeRunStatusSuccess || nr.FallbackApplied
+		if !visible {
+			continue
+		}
+		out := nr.Output
+		if len(out) == 0 {
+			out = json.RawMessage(`{}`)
+		}
+		s.nodes[nr.NodeID] = out
+	}
+	return s, nil
+}
